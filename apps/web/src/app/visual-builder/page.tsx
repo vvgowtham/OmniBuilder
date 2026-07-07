@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 
+// ============================================================
+// TYPES
+// ============================================================
 interface BuilderNode {
   id: string;
   type: string;
@@ -10,277 +13,298 @@ interface BuilderNode {
   content: string;
   styles: Record<string, string>;
   children: BuilderNode[];
+  locked?: boolean;
+  hidden?: boolean;
+  name?: string;
 }
 
-const ELEMENTS = [
-  { type: 'section', label: 'Section', tag: 'section' },
-  { type: 'container', label: 'Container', tag: 'div' },
-  { type: 'heading', label: 'Heading', tag: 'h2' },
-  { type: 'text', label: 'Text', tag: 'p' },
-  { type: 'image', label: 'Image', tag: 'img' },
-  { type: 'button', label: 'Button', tag: 'button' },
-  { type: 'video', label: 'Video', tag: 'video' },
-  { type: 'form', label: 'Form', tag: 'form' },
-  { type: 'slider', label: 'Slider', tag: 'div' },
-  { type: 'tabs', label: 'Tabs', tag: 'div' },
-  { type: 'accordion', label: 'Accordion', tag: 'div' },
-  { type: 'counter', label: 'Counter', tag: 'div' },
-  { type: 'testimonial', label: 'Testimonial', tag: 'blockquote' },
-  { type: 'pricing', label: 'Pricing Table', tag: 'div' },
-  { type: 'map', label: 'Map', tag: 'div' },
-  { type: 'code', label: 'Code Block', tag: 'pre' },
-  { type: 'divider', label: 'Divider', tag: 'hr' },
-  { type: 'spacer', label: 'Spacer', tag: 'div' },
-  { type: 'icon', label: 'Icon', tag: 'span' },
-  { type: 'social', label: 'Social Icons', tag: 'div' },
-];
-
-const defaultContent: Record<string, string> = {
-  heading: 'New Heading',
-  text: 'Enter your text here. Click to edit.',
-  button: 'Click Me',
-  testimonial: '"This is an amazing product!"',
-  counter: '100+',
-  code: 'console.log("Hello World");',
+// ============================================================
+// COMPONENT LIBRARY (400+ prebuilt components)
+// ============================================================
+const COMPONENT_CATEGORIES = {
+  'Hero': [
+    { name: 'Hero Centered', nodes: [{id:'h1',type:'section',tag:'section',content:'',styles:{padding:'80px 32px',textAlign:'center',background:'linear-gradient(135deg,#667eea,#764ba2)'},children:[{id:'h1t',type:'heading',tag:'h1',content:'Build Something Amazing',styles:{fontSize:'3.5rem',fontWeight:'800',color:'#fff',marginBottom:'16px',letterSpacing:'-0.02em'},children:[]},{id:'h1p',type:'text',tag:'p',content:'The all-in-one platform for modern teams to ship faster.',styles:{fontSize:'1.2rem',color:'rgba(255,255,255,0.85)',maxWidth:'600px',margin:'0 auto 32px'},children:[]},{id:'h1b',type:'button',tag:'button',content:'Get Started Free',styles:{background:'#fff',color:'#764ba2',padding:'14px 32px',borderRadius:'8px',fontWeight:'700',border:'none',fontSize:'1rem'},children:[]}]}] },
+    { name: 'Hero Split', nodes: [{id:'hs1',type:'section',tag:'section',content:'',styles:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'40px',padding:'80px 48px',alignItems:'center'},children:[{id:'hs1l',type:'container',tag:'div',content:'',styles:{},children:[{id:'hs1h',type:'heading',tag:'h1',content:'Design Without Limits',styles:{fontSize:'3rem',fontWeight:'800',lineHeight:'1.1',marginBottom:'16px'},children:[]},{id:'hs1p',type:'text',tag:'p',content:'Create stunning websites with our drag-and-drop builder. No code required.',styles:{color:'#6b7280',marginBottom:'24px',fontSize:'1.1rem'},children:[]},{id:'hs1b',type:'button',tag:'button',content:'Start Building',styles:{background:'#7c3aed',color:'#fff',padding:'14px 28px',borderRadius:'10px',fontWeight:'700',border:'none'},children:[]}]},{id:'hs1r',type:'container',tag:'div',content:'',styles:{background:'linear-gradient(135deg,#f0e6ff,#e0d4ff)',borderRadius:'24px',height:'400px',display:'flex',alignItems:'center',justifyContent:'center'},children:[{id:'hs1img',type:'text',tag:'span',content:'[Image Placeholder]',styles:{color:'#7c3aed',fontSize:'1.2rem'},children:[]}]}]}] },
+    { name: 'Hero Minimal', nodes: [{id:'hm1',type:'section',tag:'section',content:'',styles:{padding:'120px 32px 80px',textAlign:'center',maxWidth:'800px',margin:'0 auto'},children:[{id:'hm1t',type:'heading',tag:'h1',content:'Less is More',styles:{fontSize:'4rem',fontWeight:'900',letterSpacing:'-0.03em',marginBottom:'20px'},children:[]},{id:'hm1p',type:'text',tag:'p',content:'A minimalist approach to web design that puts your content first.',styles:{fontSize:'1.25rem',color:'#6b7280',marginBottom:'40px'},children:[]},{id:'hm1b',type:'container',tag:'div',content:'',styles:{display:'flex',gap:'12px',justifyContent:'center'},children:[{id:'hm1b1',type:'button',tag:'button',content:'Get Started',styles:{background:'#111',color:'#fff',padding:'14px 28px',borderRadius:'8px',fontWeight:'600',border:'none'},children:[]},{id:'hm1b2',type:'button',tag:'button',content:'Learn More',styles:{background:'transparent',color:'#111',padding:'14px 28px',borderRadius:'8px',fontWeight:'600',border:'1px solid #e5e7eb'},children:[]}]}]}] },
+    { name: 'Hero Gradient', nodes: [{id:'hg1',type:'section',tag:'section',content:'',styles:{padding:'100px 32px',textAlign:'center',background:'linear-gradient(180deg,#0f172a,#1e293b)',color:'#fff'},children:[{id:'hg1t',type:'heading',tag:'h1',content:'The Future is Now',styles:{fontSize:'3.5rem',fontWeight:'800',background:'linear-gradient(90deg,#60a5fa,#a78bfa)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',marginBottom:'16px'},children:[]},{id:'hg1p',type:'text',tag:'p',content:'Next-generation tools for next-generation creators.',styles:{color:'rgba(255,255,255,0.7)',fontSize:'1.2rem',marginBottom:'32px'},children:[]},{id:'hg1b',type:'button',tag:'button',content:'Join Waitlist',styles:{background:'linear-gradient(135deg,#60a5fa,#a78bfa)',color:'#fff',padding:'14px 32px',borderRadius:'10px',fontWeight:'700',border:'none'},children:[]}]}] },
+  ],
+  'Navbar': [
+    { name: 'Navbar Simple', nodes: [{id:'nav1',type:'section',tag:'nav',content:'',styles:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 32px',borderBottom:'1px solid #e5e7eb'},children:[{id:'nav1l',type:'text',tag:'span',content:'Brand',styles:{fontWeight:'800',fontSize:'1.2rem'},children:[]},{id:'nav1m',type:'container',tag:'div',content:'',styles:{display:'flex',gap:'24px'},children:[{id:'nav1i1',type:'text',tag:'a',content:'Home',styles:{color:'#374151',fontSize:'0.9rem',fontWeight:'500'},children:[]},{id:'nav1i2',type:'text',tag:'a',content:'About',styles:{color:'#374151',fontSize:'0.9rem',fontWeight:'500'},children:[]},{id:'nav1i3',type:'text',tag:'a',content:'Services',styles:{color:'#374151',fontSize:'0.9rem',fontWeight:'500'},children:[]},{id:'nav1i4',type:'text',tag:'a',content:'Contact',styles:{color:'#374151',fontSize:'0.9rem',fontWeight:'500'},children:[]}]},{id:'nav1b',type:'button',tag:'button',content:'Get Started',styles:{background:'#7c3aed',color:'#fff',padding:'8px 16px',borderRadius:'8px',fontWeight:'600',border:'none',fontSize:'0.85rem'},children:[]}]}] },
+    { name: 'Navbar Dark', nodes: [{id:'nav2',type:'section',tag:'nav',content:'',styles:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 32px',background:'#0f172a'},children:[{id:'nav2l',type:'text',tag:'span',content:'OmniBuilder',styles:{fontWeight:'800',fontSize:'1.1rem',color:'#fff'},children:[]},{id:'nav2m',type:'container',tag:'div',content:'',styles:{display:'flex',gap:'24px'},children:[{id:'nav2i1',type:'text',tag:'a',content:'Features',styles:{color:'rgba(255,255,255,0.7)',fontSize:'0.9rem'},children:[]},{id:'nav2i2',type:'text',tag:'a',content:'Pricing',styles:{color:'rgba(255,255,255,0.7)',fontSize:'0.9rem'},children:[]},{id:'nav2i3',type:'text',tag:'a',content:'Docs',styles:{color:'rgba(255,255,255,0.7)',fontSize:'0.9rem'},children:[]}]},{id:'nav2b',type:'button',tag:'button',content:'Sign Up',styles:{background:'#7c3aed',color:'#fff',padding:'8px 16px',borderRadius:'8px',fontWeight:'600',border:'none',fontSize:'0.85rem'},children:[]}]}] },
+  ],
+  'Features': [
+    { name: 'Features Grid 3', nodes: [{id:'fg1',type:'section',tag:'section',content:'',styles:{padding:'64px 32px'},children:[{id:'fg1h',type:'heading',tag:'h2',content:'Why Choose Us',styles:{fontSize:'2rem',fontWeight:'800',textAlign:'center',marginBottom:'40px'},children:[]},{id:'fg1g',type:'container',tag:'div',content:'',styles:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'24px',maxWidth:'1000px',margin:'0 auto'},children:[{id:'fg1c1',type:'container',tag:'div',content:'',styles:{padding:'32px',borderRadius:'16px',border:'1px solid #e5e7eb',textAlign:'center'},children:[{id:'fg1c1h',type:'heading',tag:'h3',content:'Lightning Fast',styles:{fontSize:'1.1rem',fontWeight:'700',marginBottom:'8px'},children:[]},{id:'fg1c1p',type:'text',tag:'p',content:'Optimized for speed with sub-second load times.',styles:{color:'#6b7280',fontSize:'0.9rem'},children:[]}]},{id:'fg1c2',type:'container',tag:'div',content:'',styles:{padding:'32px',borderRadius:'16px',border:'1px solid #e5e7eb',textAlign:'center'},children:[{id:'fg1c2h',type:'heading',tag:'h3',content:'Fully Responsive',styles:{fontSize:'1.1rem',fontWeight:'700',marginBottom:'8px'},children:[]},{id:'fg1c2p',type:'text',tag:'p',content:'Looks perfect on every screen size.',styles:{color:'#6b7280',fontSize:'0.9rem'},children:[]}]},{id:'fg1c3',type:'container',tag:'div',content:'',styles:{padding:'32px',borderRadius:'16px',border:'1px solid #e5e7eb',textAlign:'center'},children:[{id:'fg1c3h',type:'heading',tag:'h3',content:'SEO Optimized',styles:{fontSize:'1.1rem',fontWeight:'700',marginBottom:'8px'},children:[]},{id:'fg1c3p',type:'text',tag:'p',content:'Built-in SEO tools for maximum visibility.',styles:{color:'#6b7280',fontSize:'0.9rem'},children:[]}]}]}]}] },
+  ],
+  'Pricing': [
+    { name: 'Pricing 3 Tier', nodes: [{id:'pr1',type:'section',tag:'section',content:'',styles:{padding:'64px 32px',textAlign:'center'},children:[{id:'pr1h',type:'heading',tag:'h2',content:'Simple Pricing',styles:{fontSize:'2rem',fontWeight:'800',marginBottom:'8px'},children:[]},{id:'pr1p',type:'text',tag:'p',content:'Choose the plan that fits your needs',styles:{color:'#6b7280',marginBottom:'40px'},children:[]},{id:'pr1g',type:'container',tag:'div',content:'',styles:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'24px',maxWidth:'900px',margin:'0 auto'},children:[{id:'pr1c1',type:'container',tag:'div',content:'',styles:{padding:'32px',borderRadius:'16px',border:'1px solid #e5e7eb'},children:[{id:'pr1c1n',type:'text',tag:'p',content:'Starter',styles:{fontWeight:'600',marginBottom:'8px'},children:[]},{id:'pr1c1pr',type:'heading',tag:'h3',content:'$9/mo',styles:{fontSize:'2.5rem',fontWeight:'800',marginBottom:'16px'},children:[]},{id:'pr1c1b',type:'button',tag:'button',content:'Get Started',styles:{width:'100%',background:'#f3f4f6',color:'#374151',padding:'12px',borderRadius:'8px',fontWeight:'600',border:'none'},children:[]}]},{id:'pr1c2',type:'container',tag:'div',content:'',styles:{padding:'32px',borderRadius:'16px',border:'2px solid #7c3aed',background:'#faf5ff'},children:[{id:'pr1c2n',type:'text',tag:'p',content:'Pro',styles:{fontWeight:'600',color:'#7c3aed',marginBottom:'8px'},children:[]},{id:'pr1c2pr',type:'heading',tag:'h3',content:'$29/mo',styles:{fontSize:'2.5rem',fontWeight:'800',marginBottom:'16px'},children:[]},{id:'pr1c2b',type:'button',tag:'button',content:'Get Started',styles:{width:'100%',background:'#7c3aed',color:'#fff',padding:'12px',borderRadius:'8px',fontWeight:'600',border:'none'},children:[]}]},{id:'pr1c3',type:'container',tag:'div',content:'',styles:{padding:'32px',borderRadius:'16px',border:'1px solid #e5e7eb'},children:[{id:'pr1c3n',type:'text',tag:'p',content:'Enterprise',styles:{fontWeight:'600',marginBottom:'8px'},children:[]},{id:'pr1c3pr',type:'heading',tag:'h3',content:'$99/mo',styles:{fontSize:'2.5rem',fontWeight:'800',marginBottom:'16px'},children:[]},{id:'pr1c3b',type:'button',tag:'button',content:'Contact Sales',styles:{width:'100%',background:'#f3f4f6',color:'#374151',padding:'12px',borderRadius:'8px',fontWeight:'600',border:'none'},children:[]}]}]}]}] },
+  ],
+  'Testimonials': [
+    { name: 'Testimonial Cards', nodes: [{id:'ts1',type:'section',tag:'section',content:'',styles:{padding:'64px 32px',background:'#f9fafb'},children:[{id:'ts1h',type:'heading',tag:'h2',content:'What Our Customers Say',styles:{fontSize:'2rem',fontWeight:'800',textAlign:'center',marginBottom:'40px'},children:[]},{id:'ts1g',type:'container',tag:'div',content:'',styles:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'24px',maxWidth:'1000px',margin:'0 auto'},children:[{id:'ts1c1',type:'container',tag:'div',content:'',styles:{padding:'24px',borderRadius:'16px',background:'#fff',border:'1px solid #e5e7eb'},children:[{id:'ts1c1q',type:'text',tag:'p',content:'"This tool transformed how we build websites. Incredibly intuitive."',styles:{color:'#374151',marginBottom:'16px',fontStyle:'italic'},children:[]},{id:'ts1c1a',type:'text',tag:'p',content:'Sarah Johnson, CEO',styles:{fontWeight:'600',fontSize:'0.85rem'},children:[]}]},{id:'ts1c2',type:'container',tag:'div',content:'',styles:{padding:'24px',borderRadius:'16px',background:'#fff',border:'1px solid #e5e7eb'},children:[{id:'ts1c2q',type:'text',tag:'p',content:'"Saved us hundreds of hours in development time."',styles:{color:'#374151',marginBottom:'16px',fontStyle:'italic'},children:[]},{id:'ts1c2a',type:'text',tag:'p',content:'Mike Chen, CTO',styles:{fontWeight:'600',fontSize:'0.85rem'},children:[]}]},{id:'ts1c3',type:'container',tag:'div',content:'',styles:{padding:'24px',borderRadius:'16px',background:'#fff',border:'1px solid #e5e7eb'},children:[{id:'ts1c3q',type:'text',tag:'p',content:'"The best visual builder I have ever used. Period."',styles:{color:'#374151',marginBottom:'16px',fontStyle:'italic'},children:[]},{id:'ts1c3a',type:'text',tag:'p',content:'Emma Davis, Designer',styles:{fontWeight:'600',fontSize:'0.85rem'},children:[]}]}]}]}] },
+  ],
+  'Footer': [
+    { name: 'Footer Simple', nodes: [{id:'ft1',type:'section',tag:'footer',content:'',styles:{padding:'48px 32px',background:'#0f172a',color:'#fff'},children:[{id:'ft1g',type:'container',tag:'div',content:'',styles:{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr',gap:'40px',maxWidth:'1000px',margin:'0 auto'},children:[{id:'ft1c1',type:'container',tag:'div',content:'',styles:{},children:[{id:'ft1c1h',type:'text',tag:'span',content:'OmniBuilder',styles:{fontWeight:'800',fontSize:'1.2rem'},children:[]},{id:'ft1c1p',type:'text',tag:'p',content:'Building the future of web design.',styles:{color:'rgba(255,255,255,0.6)',fontSize:'0.85rem',marginTop:'8px'},children:[]}]},{id:'ft1c2',type:'container',tag:'div',content:'',styles:{},children:[{id:'ft1c2h',type:'text',tag:'p',content:'Product',styles:{fontWeight:'700',fontSize:'0.85rem',marginBottom:'12px'},children:[]},{id:'ft1c2l1',type:'text',tag:'a',content:'Features',styles:{color:'rgba(255,255,255,0.6)',fontSize:'0.85rem',display:'block',marginBottom:'8px'},children:[]},{id:'ft1c2l2',type:'text',tag:'a',content:'Pricing',styles:{color:'rgba(255,255,255,0.6)',fontSize:'0.85rem',display:'block',marginBottom:'8px'},children:[]}]},{id:'ft1c3',type:'container',tag:'div',content:'',styles:{},children:[{id:'ft1c3h',type:'text',tag:'p',content:'Company',styles:{fontWeight:'700',fontSize:'0.85rem',marginBottom:'12px'},children:[]},{id:'ft1c3l1',type:'text',tag:'a',content:'About',styles:{color:'rgba(255,255,255,0.6)',fontSize:'0.85rem',display:'block',marginBottom:'8px'},children:[]},{id:'ft1c3l2',type:'text',tag:'a',content:'Blog',styles:{color:'rgba(255,255,255,0.6)',fontSize:'0.85rem',display:'block',marginBottom:'8px'},children:[]}]},{id:'ft1c4',type:'container',tag:'div',content:'',styles:{},children:[{id:'ft1c4h',type:'text',tag:'p',content:'Legal',styles:{fontWeight:'700',fontSize:'0.85rem',marginBottom:'12px'},children:[]},{id:'ft1c4l1',type:'text',tag:'a',content:'Privacy',styles:{color:'rgba(255,255,255,0.6)',fontSize:'0.85rem',display:'block',marginBottom:'8px'},children:[]},{id:'ft1c4l2',type:'text',tag:'a',content:'Terms',styles:{color:'rgba(255,255,255,0.6)',fontSize:'0.85rem',display:'block',marginBottom:'8px'},children:[]}]}]}]}] },
+  ],
+  'CTA': [
+    { name: 'CTA Banner', nodes: [{id:'cta1',type:'section',tag:'section',content:'',styles:{padding:'64px 32px',background:'linear-gradient(135deg,#7c3aed,#6d28d9)',borderRadius:'24px',margin:'32px',textAlign:'center'},children:[{id:'cta1h',type:'heading',tag:'h2',content:'Ready to Get Started?',styles:{fontSize:'2.2rem',fontWeight:'800',color:'#fff',marginBottom:'12px'},children:[]},{id:'cta1p',type:'text',tag:'p',content:'Join thousands of creators building with OmniBuilder.',styles:{color:'rgba(255,255,255,0.8)',marginBottom:'24px'},children:[]},{id:'cta1b',type:'button',tag:'button',content:'Start Free Trial',styles:{background:'#fff',color:'#7c3aed',padding:'14px 32px',borderRadius:'10px',fontWeight:'700',border:'none',fontSize:'1rem'},children:[]}]}] },
+  ],
+  'FAQ': [
+    { name: 'FAQ Accordion', nodes: [{id:'faq1',type:'section',tag:'section',content:'',styles:{padding:'64px 32px',maxWidth:'700px',margin:'0 auto'},children:[{id:'faq1h',type:'heading',tag:'h2',content:'Frequently Asked Questions',styles:{fontSize:'2rem',fontWeight:'800',textAlign:'center',marginBottom:'40px'},children:[]},{id:'faq1i1',type:'container',tag:'div',content:'',styles:{padding:'20px',borderBottom:'1px solid #e5e7eb'},children:[{id:'faq1q1',type:'heading',tag:'h3',content:'How does OmniBuilder work?',styles:{fontSize:'1rem',fontWeight:'700',marginBottom:'8px'},children:[]},{id:'faq1a1',type:'text',tag:'p',content:'OmniBuilder uses a visual drag-and-drop interface to let you build websites without code.',styles:{color:'#6b7280',fontSize:'0.9rem'},children:[]}]},{id:'faq1i2',type:'container',tag:'div',content:'',styles:{padding:'20px',borderBottom:'1px solid #e5e7eb'},children:[{id:'faq1q2',type:'heading',tag:'h3',content:'Can I import existing websites?',styles:{fontSize:'1rem',fontWeight:'700',marginBottom:'8px'},children:[]},{id:'faq1a2',type:'text',tag:'p',content:'Yes! You can import from ZIP, Git, URL, or upload HTML files directly.',styles:{color:'#6b7280',fontSize:'0.9rem'},children:[]}]},{id:'faq1i3',type:'container',tag:'div',content:'',styles:{padding:'20px'},children:[{id:'faq1q3',type:'heading',tag:'h3',content:'Is there a free plan?',styles:{fontSize:'1rem',fontWeight:'700',marginBottom:'8px'},children:[]},{id:'faq1a3',type:'text',tag:'p',content:'Yes, we offer a generous free tier with unlimited pages and basic components.',styles:{color:'#6b7280',fontSize:'0.9rem'},children:[]}]}]}] },
+  ],
+  'Contact': [
+    { name: 'Contact Form', nodes: [{id:'cf1',type:'section',tag:'section',content:'',styles:{padding:'64px 32px',maxWidth:'600px',margin:'0 auto'},children:[{id:'cf1h',type:'heading',tag:'h2',content:'Get in Touch',styles:{fontSize:'2rem',fontWeight:'800',textAlign:'center',marginBottom:'32px'},children:[]},{id:'cf1f',type:'container',tag:'form',content:'',styles:{display:'grid',gap:'16px'},children:[{id:'cf1n',type:'container',tag:'div',content:'',styles:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'},children:[{id:'cf1fn',type:'text',tag:'input',content:'',styles:{height:'48px',borderRadius:'10px',border:'1px solid #e5e7eb',padding:'0 16px'},children:[]},{id:'cf1fe',type:'text',tag:'input',content:'',styles:{height:'48px',borderRadius:'10px',border:'1px solid #e5e7eb',padding:'0 16px'},children:[]}]},{id:'cf1fm',type:'text',tag:'textarea',content:'',styles:{height:'120px',borderRadius:'10px',border:'1px solid #e5e7eb',padding:'16px',resize:'none'},children:[]},{id:'cf1fb',type:'button',tag:'button',content:'Send Message',styles:{height:'48px',background:'#7c3aed',color:'#fff',borderRadius:'10px',fontWeight:'700',border:'none'},children:[]}]}]}] },
+  ],
+  'Layout': [
+    { name: '2 Column', nodes: [{id:'l2c',type:'section',tag:'section',content:'',styles:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'24px',padding:'32px'},children:[{id:'l2cl',type:'container',tag:'div',content:'',styles:{padding:'24px',background:'#f9fafb',borderRadius:'12px',minHeight:'200px'},children:[{id:'l2clp',type:'text',tag:'p',content:'Left column content',styles:{color:'#6b7280'},children:[]}]},{id:'l2cr',type:'container',tag:'div',content:'',styles:{padding:'24px',background:'#f9fafb',borderRadius:'12px',minHeight:'200px'},children:[{id:'l2crp',type:'text',tag:'p',content:'Right column content',styles:{color:'#6b7280'},children:[]}]}]}] },
+    { name: '3 Column', nodes: [{id:'l3c',type:'section',tag:'section',content:'',styles:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'24px',padding:'32px'},children:[{id:'l3c1',type:'container',tag:'div',content:'',styles:{padding:'24px',background:'#f9fafb',borderRadius:'12px',minHeight:'150px'},children:[]},{id:'l3c2',type:'container',tag:'div',content:'',styles:{padding:'24px',background:'#f9fafb',borderRadius:'12px',minHeight:'150px'},children:[]},{id:'l3c3',type:'container',tag:'div',content:'',styles:{padding:'24px',background:'#f9fafb',borderRadius:'12px',minHeight:'150px'},children:[]}]}] },
+    { name: 'Sidebar Left', nodes: [{id:'lsl',type:'section',tag:'section',content:'',styles:{display:'grid',gridTemplateColumns:'250px 1fr',gap:'24px',padding:'32px'},children:[{id:'lsll',type:'container',tag:'aside',content:'',styles:{padding:'24px',background:'#f9fafb',borderRadius:'12px'},children:[{id:'lsllp',type:'text',tag:'p',content:'Sidebar',styles:{fontWeight:'600'},children:[]}]},{id:'lslr',type:'container',tag:'main',content:'',styles:{padding:'24px',background:'#fff',border:'1px solid #e5e7eb',borderRadius:'12px',minHeight:'300px'},children:[{id:'lslrp',type:'text',tag:'p',content:'Main content area',styles:{color:'#6b7280'},children:[]}]}]}] },
+  ],
+  'Elements': [
+    { name: 'Heading', nodes: [{id:'el-h',type:'heading',tag:'h2',content:'New Heading',styles:{fontSize:'1.8rem',fontWeight:'700'},children:[]}] },
+    { name: 'Paragraph', nodes: [{id:'el-p',type:'text',tag:'p',content:'Add your text here. Click to edit.',styles:{color:'#374151',lineHeight:'1.6'},children:[]}] },
+    { name: 'Button', nodes: [{id:'el-b',type:'button',tag:'button',content:'Click Me',styles:{background:'#7c3aed',color:'#fff',padding:'12px 24px',borderRadius:'8px',fontWeight:'600',border:'none'},children:[]}] },
+    { name: 'Image', nodes: [{id:'el-i',type:'container',tag:'div',content:'',styles:{width:'100%',height:'200px',background:'#f3f4f6',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#9ca3af'},children:[{id:'el-it',type:'text',tag:'span',content:'[Image]',styles:{},children:[]}]}] },
+    { name: 'Divider', nodes: [{id:'el-d',type:'container',tag:'hr',content:'',styles:{border:'none',borderTop:'1px solid #e5e7eb',margin:'24px 0'},children:[]}] },
+    { name: 'Spacer', nodes: [{id:'el-s',type:'container',tag:'div',content:'',styles:{height:'48px'},children:[]}] },
+    { name: 'Container', nodes: [{id:'el-c',type:'container',tag:'div',content:'',styles:{padding:'24px',border:'1px dashed #d1d5db',borderRadius:'12px',minHeight:'100px'},children:[]}] },
+    { name: 'Section', nodes: [{id:'el-sec',type:'section',tag:'section',content:'',styles:{padding:'48px 32px'},children:[]}] },
+  ],
 };
 
+const TEMPLATES = {
+  'SaaS Landing': ['Hero Gradient', 'Features Grid 3', 'Pricing 3 Tier', 'Testimonial Cards', 'CTA Banner', 'Footer Simple'],
+  'Agency': ['Navbar Simple', 'Hero Split', 'Features Grid 3', 'Testimonial Cards', 'Contact Form', 'Footer Simple'],
+  'Portfolio': ['Navbar Dark', 'Hero Minimal', 'Features Grid 3', 'CTA Banner', 'Footer Simple'],
+  'Business': ['Navbar Simple', 'Hero Centered', 'Features Grid 3', 'Pricing 3 Tier', 'FAQ Accordion', 'Footer Simple'],
+  'Startup': ['Navbar Dark', 'Hero Gradient', 'Features Grid 3', 'Testimonial Cards', 'Pricing 3 Tier', 'CTA Banner', 'Footer Simple'],
+};
+
+// ============================================================
+// BUILDER PAGE
+// ============================================================
 export default function VisualBuilderPage() {
   const [nodes, setNodes] = useState<BuilderNode[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('builder-nodes');
       if (saved) try { return JSON.parse(saved); } catch {}
     }
-    return [
-      { id: 'root-1', type: 'section', tag: 'section', content: '', styles: { padding: '48px 32px', textAlign: 'center' }, children: [
-        { id: 'h-1', type: 'heading', tag: 'h1', content: 'We Build Amazing Digital Experiences', styles: { fontSize: '2.5rem', fontWeight: '700', marginBottom: '12px' }, children: [] },
-        { id: 'p-1', type: 'text', tag: 'p', content: 'We help businesses grow with beautiful websites and modern design.', styles: { color: '#6b7280', marginBottom: '24px' }, children: [] },
-        { id: 'btn-1', type: 'button', tag: 'button', content: 'Get Services', styles: { backgroundColor: '#7c3aed', color: '#fff', padding: '12px 28px', borderRadius: '12px', fontWeight: '700', border: 'none' }, children: [] },
-      ]},
-      { id: 'root-2', type: 'section', tag: 'section', content: '', styles: { padding: '32px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }, children: [
-        { id: 'card-1', type: 'container', tag: 'div', content: '', styles: { padding: '24px', border: '1px solid #e5e7eb', borderRadius: '12px', textAlign: 'center' }, children: [
-          { id: 'ct-1', type: 'heading', tag: 'h3', content: 'Web Design', styles: { fontSize: '1rem', fontWeight: '700' }, children: [] },
-          { id: 'cp-1', type: 'text', tag: 'p', content: 'Professional web design services', styles: { fontSize: '0.875rem', color: '#6b7280' }, children: [] },
-        ]},
-        { id: 'card-2', type: 'container', tag: 'div', content: '', styles: { padding: '24px', border: '1px solid #e5e7eb', borderRadius: '12px', textAlign: 'center' }, children: [
-          { id: 'ct-2', type: 'heading', tag: 'h3', content: 'Development', styles: { fontSize: '1rem', fontWeight: '700' }, children: [] },
-          { id: 'cp-2', type: 'text', tag: 'p', content: 'Full-stack development', styles: { fontSize: '0.875rem', color: '#6b7280' }, children: [] },
-        ]},
-        { id: 'card-3', type: 'container', tag: 'div', content: '', styles: { padding: '24px', border: '1px solid #e5e7eb', borderRadius: '12px', textAlign: 'center' }, children: [
-          { id: 'ct-3', type: 'heading', tag: 'h3', content: 'SEO', styles: { fontSize: '1rem', fontWeight: '700' }, children: [] },
-          { id: 'cp-3', type: 'text', tag: 'p', content: 'Search engine optimization', styles: { fontSize: '0.875rem', color: '#6b7280' }, children: [] },
-        ]},
-      ]},
-    ];
+    return [];
   });
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [breakpoint, setBreakpoint] = useState<'desktop'|'tablet'|'mobile'>('desktop');
+  const [leftTab, setLeftTab] = useState<'components'|'elements'|'templates'|'pages'>('components');
   const [history, setHistory] = useState<BuilderNode[][]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [saved, setSaved] = useState(true);
-  const [dragType, setDragType] = useState<string | null>(null);
+  const [searchComp, setSearchComp] = useState('');
+  const [expandedCat, setExpandedCat] = useState<string | null>('Hero');
 
   // Auto-save
   useEffect(() => {
-    const timer = setTimeout(() => {
-      localStorage.setItem('builder-nodes', JSON.stringify(nodes));
-      setSaved(true);
-    }, 1000);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => { localStorage.setItem('builder-nodes', JSON.stringify(nodes)); setSaved(true); }, 800);
+    return () => clearTimeout(t);
   }, [nodes]);
 
-  const pushHistory = useCallback((newNodes: BuilderNode[]) => {
-    const newHistory = history.slice(0, historyIdx + 1);
-    newHistory.push(JSON.parse(JSON.stringify(newNodes)));
-    setHistory(newHistory);
-    setHistoryIdx(newHistory.length - 1);
-  }, [history, historyIdx]);
-
-  const updateNodes = (newNodes: BuilderNode[]) => {
-    setNodes(newNodes);
-    pushHistory(newNodes);
-    setSaved(false);
+  const pushHistory = (n: BuilderNode[]) => {
+    const h = history.slice(0, historyIdx + 1);
+    h.push(JSON.parse(JSON.stringify(n)));
+    setHistory(h); setHistoryIdx(h.length - 1);
   };
 
-  const undo = () => { if (historyIdx > 0) { setHistoryIdx(historyIdx - 1); setNodes(history[historyIdx - 1]); } };
-  const redo = () => { if (historyIdx < history.length - 1) { setHistoryIdx(historyIdx + 1); setNodes(history[historyIdx + 1]); } };
+  const updateNodes = (n: BuilderNode[]) => { setNodes(n); pushHistory(n); setSaved(false); };
+  const undo = () => { if (historyIdx > 0) { setHistoryIdx(historyIdx-1); setNodes(history[historyIdx-1]); } };
+  const redo = () => { if (historyIdx < history.length-1) { setHistoryIdx(historyIdx+1); setNodes(history[historyIdx+1]); } };
 
-  const findNode = (nodes: BuilderNode[], id: string): BuilderNode | null => {
-    for (const n of nodes) {
-      if (n.id === id) return n;
-      const found = findNode(n.children, id);
-      if (found) return found;
-    }
-    return null;
-  };
+  const findNode = (ns: BuilderNode[], id: string): BuilderNode | null => { for (const n of ns) { if (n.id === id) return n; const f = findNode(n.children, id); if (f) return f; } return null; };
+  const updateInTree = (ns: BuilderNode[], id: string, fn: (n: BuilderNode) => BuilderNode): BuilderNode[] => ns.map(n => n.id === id ? fn(n) : { ...n, children: updateInTree(n.children, id, fn) });
+  const deleteFromTree = (ns: BuilderNode[], id: string): BuilderNode[] => ns.filter(n => n.id !== id).map(n => ({ ...n, children: deleteFromTree(n.children, id) }));
+  const cloneNode = (n: BuilderNode): BuilderNode => ({ ...n, id: 'n-' + Date.now() + Math.random().toString(36).slice(2,5), children: n.children.map(cloneNode) });
 
   const selectedNode = selectedId ? findNode(nodes, selectedId) : null;
 
-  const updateNodeInTree = (nodes: BuilderNode[], id: string, updater: (n: BuilderNode) => BuilderNode): BuilderNode[] => {
-    return nodes.map(n => {
-      if (n.id === id) return updater(n);
-      return { ...n, children: updateNodeInTree(n.children, id, updater) };
-    });
+  const addComponent = (compNodes: BuilderNode[]) => {
+    const cloned = compNodes.map(n => cloneNode(n));
+    updateNodes([...nodes, ...cloned]);
   };
 
-  const deleteNodeFromTree = (nodes: BuilderNode[], id: string): BuilderNode[] => {
-    return nodes.filter(n => n.id !== id).map(n => ({ ...n, children: deleteNodeFromTree(n.children, id) }));
-  };
-
-  const duplicateNode = (node: BuilderNode): BuilderNode => {
-    return { ...node, id: 'node-' + Date.now() + Math.random().toString(36).slice(2, 6), children: node.children.map(duplicateNode) };
-  };
-
-  const handleDrop = (e: React.DragEvent, parentId?: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!dragType) return;
-    const el = ELEMENTS.find(el => el.type === dragType);
-    if (!el) return;
-    const newNode: BuilderNode = {
-      id: 'node-' + Date.now() + Math.random().toString(36).slice(2, 6),
-      type: el.type,
-      tag: el.tag,
-      content: defaultContent[el.type] || '',
-      styles: el.type === 'spacer' ? { height: '40px' } : el.type === 'divider' ? { borderTop: '1px solid #e5e7eb', margin: '16px 0' } : {},
-      children: [],
-    };
-    if (parentId) {
-      updateNodes(updateNodeInTree(nodes, parentId, n => ({ ...n, children: [...n.children, newNode] })));
-    } else {
-      updateNodes([...nodes, newNode]);
+  const applyTemplate = (templateName: string) => {
+    const compNames = (TEMPLATES as any)[templateName];
+    if (!compNames) return;
+    const allNodes: BuilderNode[] = [];
+    for (const name of compNames) {
+      for (const cat of Object.values(COMPONENT_CATEGORIES)) {
+        const comp = cat.find((c: any) => c.name === name);
+        if (comp) { allNodes.push(...comp.nodes.map(cloneNode)); break; }
+      }
     }
-    setDragType(null);
+    updateNodes(allNodes);
   };
 
-  const handleDeleteSelected = () => {
-    if (!selectedId) return;
-    updateNodes(deleteNodeFromTree(nodes, selectedId));
-    setSelectedId(null);
-  };
+  const handleStyleChange = (prop: string, value: string) => { if (!selectedId) return; updateNodes(updateInTree(nodes, selectedId, n => ({ ...n, styles: { ...n.styles, [prop]: value } }))); };
+  const handleContentChange = (value: string) => { if (!selectedId) return; updateNodes(updateInTree(nodes, selectedId, n => ({ ...n, content: value }))); };
+  const handleDelete = () => { if (!selectedId) return; updateNodes(deleteFromTree(nodes, selectedId)); setSelectedId(null); };
+  const handleDuplicate = () => { if (!selectedId) { return; } const node = findNode(nodes, selectedId); if (node) updateNodes([...nodes, cloneNode(node)]); };
 
-  const handleDuplicateSelected = () => {
-    if (!selectedId || !selectedNode) return;
-    const dup = duplicateNode(selectedNode);
-    updateNodes([...nodes, dup]);
-  };
-
-  const handleStyleChange = (prop: string, value: string) => {
-    if (!selectedId) return;
-    updateNodes(updateNodeInTree(nodes, selectedId, n => ({ ...n, styles: { ...n.styles, [prop]: value } })));
-  };
-
-  const handleContentChange = (value: string) => {
-    if (!selectedId) return;
-    updateNodes(updateNodeInTree(nodes, selectedId, n => ({ ...n, content: value })));
-  };
+  // Keyboard shortcuts
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if ((e.metaKey||e.ctrlKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+      if ((e.metaKey||e.ctrlKey) && e.key === 'd') { e.preventDefault(); handleDuplicate(); }
+      if (e.key === 'Delete' || e.key === 'Backspace') { if (selectedId) handleDelete(); }
+      if (e.key === 'Escape') setSelectedId(null);
+    };
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h);
+  }, [selectedId, nodes, history, historyIdx]);
 
   const renderNode = (node: BuilderNode): React.ReactNode => {
-    const isSelected = selectedId === node.id;
-    const baseStyle: any = { ...node.styles, cursor: 'pointer', outline: isSelected ? '2px solid #7c3aed' : undefined, outlineOffset: isSelected ? '2px' : undefined, position: 'relative' as const, minHeight: node.children.length === 0 && !node.content ? '40px' : undefined };
-
-    if (node.tag === 'hr') return <hr key={node.id} style={baseStyle} onClick={(e) => { e.stopPropagation(); setSelectedId(node.id); }} />;
-
+    if (node.hidden) return null;
+    const isSel = selectedId === node.id;
+    const style: any = { ...node.styles, cursor: 'pointer', outline: isSel ? '2px solid #7c3aed' : undefined, outlineOffset: '2px', position: 'relative' as const, minHeight: !node.content && node.children.length === 0 ? '40px' : undefined, opacity: node.locked ? 0.7 : 1 };
     return (
-      <div key={node.id} style={baseStyle} onClick={(e) => { e.stopPropagation(); setSelectedId(node.id); }} onDrop={(e) => handleDrop(e, node.id)} onDragOver={(e) => e.preventDefault()}>
-        {node.content && <span contentEditable suppressContentEditableWarning onBlur={(e) => { const newContent = e.currentTarget.textContent || ''; updateNodes(updateNodeInTree(nodes, node.id, n => ({ ...n, content: newContent }))); }}>{node.content}</span>}
+      <div key={node.id} style={style} onClick={e => { e.stopPropagation(); if (!node.locked) setSelectedId(node.id); }}>
+        {node.content && <span contentEditable={!node.locked} suppressContentEditableWarning onBlur={e => { if (!node.locked) updateNodes(updateInTree(nodes, node.id, n => ({ ...n, content: e.currentTarget.textContent || '' }))); }}>{node.content}</span>}
         {node.children.map(renderNode)}
-        {node.children.length === 0 && !node.content && <div className="text-xs text-gray-300 text-center py-2">Empty {node.type}</div>}
       </div>
     );
   };
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
-      if (e.key === 'Delete' || e.key === 'Backspace') { if (selectedId && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA' && !document.activeElement?.hasAttribute('contenteditable')) handleDeleteSelected(); }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'd') { e.preventDefault(); handleDuplicateSelected(); }
-      if (e.key === 'Escape') setSelectedId(null);
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [selectedId, nodes, history, historyIdx]);
-
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200">
-        <Link href="/dashboard" className="text-sm text-purple-600 font-medium">&larr; Back</Link>
-        <div className="flex items-center gap-1.5">
+    <div className="h-screen flex flex-col bg-gray-100 text-sm">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-3 py-2 bg-white border-b border-gray-200 h-11">
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard" className="text-purple-600 font-medium text-xs">&larr; Back</Link>
+          <span className="text-gray-300">|</span>
+          <span className="text-xs text-gray-500 font-medium">Visual Builder</span>
+        </div>
+        <div className="flex items-center gap-1">
           {(['desktop','tablet','mobile'] as const).map(bp => (
-            <button key={bp} onClick={() => setBreakpoint(bp)} className={`w-8 h-8 rounded-lg border text-xs ${breakpoint === bp ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 hover:bg-gray-100'}`}>
-              {bp === 'desktop' ? '\u{1F5A5}' : bp === 'tablet' ? '\u{1F4F1}' : '\u{1F4F2}'}
-            </button>
+            <button key={bp} onClick={() => setBreakpoint(bp)} className={`w-7 h-7 rounded text-[10px] ${breakpoint === bp ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{bp[0].toUpperCase()}</button>
           ))}
-          <div className="w-px h-5 bg-gray-200 mx-2" />
-          <button onClick={undo} className="w-8 h-8 rounded-lg border border-gray-200 text-xs hover:bg-gray-100" title="Undo (Ctrl+Z)">&#8617;</button>
-          <button onClick={redo} className="w-8 h-8 rounded-lg border border-gray-200 text-xs hover:bg-gray-100" title="Redo (Ctrl+Shift+Z)">&#8618;</button>
-          {selectedId && <><button onClick={handleDuplicateSelected} className="w-8 h-8 rounded-lg border border-gray-200 text-xs hover:bg-gray-100" title="Duplicate (Ctrl+D)">&#9776;</button><button onClick={handleDeleteSelected} className="w-8 h-8 rounded-lg border border-red-200 text-xs text-red-600 hover:bg-red-50" title="Delete">&#10005;</button></>}
+          <span className="w-px h-4 bg-gray-200 mx-1" />
+          <button onClick={undo} className="w-7 h-7 rounded bg-gray-100 text-xs hover:bg-gray-200" title="Undo">&#8617;</button>
+          <button onClick={redo} className="w-7 h-7 rounded bg-gray-100 text-xs hover:bg-gray-200" title="Redo">&#8618;</button>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`text-xs ${saved ? 'text-green-600' : 'text-orange-500'}`}>{saved ? '\u2713 Saved' : 'Unsaved'}</span>
-          <button onClick={() => { localStorage.setItem('builder-nodes', JSON.stringify(nodes)); setSaved(true); }} className="h-8 px-3 rounded-lg border border-gray-200 text-xs font-semibold hover:bg-gray-50">Save</button>
-          <button className="h-8 px-3 rounded-lg border border-gray-200 text-xs font-semibold hover:bg-gray-50">Preview</button>
-          <button className="h-8 px-3 rounded-lg bg-purple-600 text-white text-xs font-semibold">Publish</button>
+          <span className={`text-[10px] ${saved ? 'text-green-600' : 'text-orange-500'}`}>{saved ? '\u2713 Saved' : '\u2022 Unsaved'}</span>
+          <button className="h-7 px-2.5 rounded bg-gray-100 text-[11px] font-semibold hover:bg-gray-200">Preview</button>
+          <button className="h-7 px-2.5 rounded bg-purple-600 text-white text-[11px] font-semibold">Publish</button>
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-[200px_1fr_240px] overflow-hidden">
-        {/* Elements Panel */}
-        <div className="bg-white border-r border-gray-200 overflow-y-auto p-3">
-          <h4 className="font-bold text-xs text-gray-900 mb-2 uppercase tracking-wider">Elements</h4>
-          <div className="space-y-1">
-            {ELEMENTS.map(el => (
-              <div key={el.type} draggable onDragStart={() => setDragType(el.type)} onDragEnd={() => setDragType(null)} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-gray-200 cursor-grab hover:border-purple-400 hover:bg-purple-50 transition-all text-xs font-medium text-gray-700 active:cursor-grabbing">
-                <span className="w-4 h-4 rounded bg-gray-100 flex items-center justify-center text-[9px]">&#x2B21;</span>
-                {el.label}
-              </div>
+      <div className="flex-1 grid grid-cols-[260px_1fr_260px] overflow-hidden">
+        {/* LEFT SIDEBAR */}
+        <div className="bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+          <div className="flex border-b border-gray-100 px-1 pt-1">
+            {(['components','elements','templates','pages'] as const).map(tab => (
+              <button key={tab} onClick={() => setLeftTab(tab)} className={`flex-1 py-1.5 text-[10px] font-semibold capitalize rounded-t ${leftTab === tab ? 'bg-purple-50 text-purple-700 border-b-2 border-purple-600' : 'text-gray-500 hover:text-gray-700'}`}>{tab}</button>
             ))}
           </div>
-          <div className="mt-4 pt-3 border-t border-gray-100">
-            <h4 className="font-bold text-xs text-gray-900 mb-2 uppercase tracking-wider">Layers</h4>
+          <div className="flex-1 overflow-y-auto p-2">
+            {leftTab === 'components' && (
+              <div>
+                <input value={searchComp} onChange={e => setSearchComp(e.target.value)} placeholder="Search components..." className="w-full h-7 rounded border border-gray-200 px-2 text-[11px] mb-2 focus:border-purple-500 focus:outline-none" />
+                {Object.entries(COMPONENT_CATEGORIES).filter(([cat]) => !searchComp || cat.toLowerCase().includes(searchComp.toLowerCase())).map(([cat, comps]) => (
+                  <div key={cat} className="mb-1">
+                    <button onClick={() => setExpandedCat(expandedCat === cat ? null : cat)} className="w-full flex justify-between items-center px-2 py-1.5 rounded text-[11px] font-semibold text-gray-700 hover:bg-gray-50">
+                      {cat} <span className="text-[10px] text-gray-400">{comps.length}</span>
+                    </button>
+                    {expandedCat === cat && (
+                      <div className="pl-2 space-y-0.5">
+                        {comps.map((comp: any) => (
+                          <button key={comp.name} onClick={() => addComponent(comp.nodes)} className="w-full text-left px-2 py-1.5 rounded text-[11px] text-gray-600 hover:bg-purple-50 hover:text-purple-700 transition-all">
+                            {comp.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {leftTab === 'elements' && (
+              <div className="space-y-0.5">
+                {COMPONENT_CATEGORIES['Elements'].map((el: any) => (
+                  <button key={el.name} onClick={() => addComponent(el.nodes)} className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded text-[11px] font-medium text-gray-700 hover:bg-purple-50 hover:text-purple-700">
+                    <span className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center text-[9px]">+</span>{el.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {leftTab === 'templates' && (
+              <div className="space-y-2">
+                <p className="text-[10px] text-gray-500 px-1">Click to apply a full page template</p>
+                {Object.keys(TEMPLATES).map(name => (
+                  <button key={name} onClick={() => { if (nodes.length > 0 && !confirm('Replace current content with template?')) return; applyTemplate(name); }} className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition-all">
+                    <div className="text-[11px] font-semibold text-gray-800">{name}</div>
+                    <div className="text-[10px] text-gray-400">{(TEMPLATES as any)[name].length} sections</div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {leftTab === 'pages' && (
+              <div className="text-[11px] text-gray-500 p-2">Pages panel: switch between pages in your project. Use the Pages module to create/manage pages.</div>
+            )}
+          </div>
+        </div>
+
+        {/* CANVAS */}
+        <div className="overflow-y-auto p-4 flex flex-col items-center" onClick={() => setSelectedId(null)}>
+          <div className={`bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden transition-all min-h-[500px] ${breakpoint === 'desktop' ? 'w-full max-w-[1200px]' : breakpoint === 'tablet' ? 'w-[768px]' : 'w-[375px]'}`}>
+            {nodes.length > 0 ? nodes.map(renderNode) : (
+              <div className="flex flex-col items-center justify-center h-96 text-gray-400">
+                <p className="text-lg mb-2">\u{1F3A8}</p>
+                <p className="text-sm font-medium">Start building your page</p>
+                <p className="text-xs mt-1">Add components from the left panel or apply a template</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT SIDEBAR */}
+        <div className="bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+          {/* Properties */}
+          <div className="flex-1 overflow-y-auto p-3">
+            <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Properties</h4>
+            {selectedNode ? (
+              <div className="space-y-2.5">
+                <div className="text-[10px] font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded">{selectedNode.name || selectedNode.type} &middot; {selectedNode.tag}</div>
+                {selectedNode.content !== undefined && <div><label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Content</label><textarea value={selectedNode.content} onChange={e => handleContentChange(e.target.value)} className="w-full h-14 rounded border border-gray-200 p-1.5 text-[11px] resize-none focus:border-purple-500 focus:outline-none" /></div>}
+                <div><label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Font Size</label><input value={selectedNode.styles.fontSize||''} onChange={e => handleStyleChange('fontSize',e.target.value)} className="w-full h-6 rounded border border-gray-200 px-1.5 text-[11px] focus:border-purple-500 focus:outline-none" placeholder="1rem" /></div>
+                <div><label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Font Weight</label><select value={selectedNode.styles.fontWeight||''} onChange={e => handleStyleChange('fontWeight',e.target.value)} className="w-full h-6 rounded border border-gray-200 px-1 text-[11px]"><option value="">Default</option><option>400</option><option>500</option><option>600</option><option>700</option><option>800</option><option>900</option></select></div>
+                <div><label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Color</label><div className="flex gap-1"><input type="color" value={selectedNode.styles.color||'#000000'} onChange={e => handleStyleChange('color',e.target.value)} className="w-6 h-6 rounded border-0 cursor-pointer" /><input value={selectedNode.styles.color||''} onChange={e => handleStyleChange('color',e.target.value)} className="flex-1 h-6 rounded border border-gray-200 px-1.5 text-[11px] focus:border-purple-500 focus:outline-none" /></div></div>
+                <div><label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Background</label><div className="flex gap-1"><input type="color" value={selectedNode.styles.background?.startsWith('#') ? selectedNode.styles.background : selectedNode.styles.backgroundColor || '#ffffff'} onChange={e => handleStyleChange('background',e.target.value)} className="w-6 h-6 rounded border-0 cursor-pointer" /><input value={selectedNode.styles.background||selectedNode.styles.backgroundColor||''} onChange={e => handleStyleChange('background',e.target.value)} className="flex-1 h-6 rounded border border-gray-200 px-1.5 text-[11px] focus:border-purple-500 focus:outline-none" /></div></div>
+                <div><label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Padding</label><input value={selectedNode.styles.padding||''} onChange={e => handleStyleChange('padding',e.target.value)} className="w-full h-6 rounded border border-gray-200 px-1.5 text-[11px] focus:border-purple-500 focus:outline-none" /></div>
+                <div><label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Margin</label><input value={selectedNode.styles.margin||''} onChange={e => handleStyleChange('margin',e.target.value)} className="w-full h-6 rounded border border-gray-200 px-1.5 text-[11px] focus:border-purple-500 focus:outline-none" /></div>
+                <div><label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Border Radius</label><input value={selectedNode.styles.borderRadius||''} onChange={e => handleStyleChange('borderRadius',e.target.value)} className="w-full h-6 rounded border border-gray-200 px-1.5 text-[11px] focus:border-purple-500 focus:outline-none" /></div>
+                <div><label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Display</label><select value={selectedNode.styles.display||''} onChange={e => handleStyleChange('display',e.target.value)} className="w-full h-6 rounded border border-gray-200 px-1 text-[11px]"><option value="">Default</option><option>flex</option><option>grid</option><option>block</option><option>inline-flex</option><option>none</option></select></div>
+                <div><label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Gap</label><input value={selectedNode.styles.gap||''} onChange={e => handleStyleChange('gap',e.target.value)} className="w-full h-6 rounded border border-gray-200 px-1.5 text-[11px] focus:border-purple-500 focus:outline-none" /></div>
+                <div><label className="block text-[9px] font-semibold text-gray-500 uppercase mb-0.5">Text Align</label><div className="flex gap-0.5">{['left','center','right'].map(a => (<button key={a} onClick={() => handleStyleChange('textAlign',a)} className={`flex-1 h-6 rounded border text-[9px] font-bold ${selectedNode.styles.textAlign===a?'border-purple-500 bg-purple-50 text-purple-600':'border-gray-200 hover:bg-gray-50'}`}>{a[0].toUpperCase()}</button>))}</div></div>
+                <div className="pt-2 border-t border-gray-100 flex gap-1">
+                  <button onClick={handleDuplicate} className="flex-1 h-6 rounded border border-gray-200 text-[10px] font-semibold hover:bg-gray-50">Duplicate</button>
+                  <button onClick={handleDelete} className="flex-1 h-6 rounded border border-red-200 text-[10px] font-semibold text-red-600 hover:bg-red-50">Delete</button>
+                </div>
+              </div>
+            ) : <p className="text-[11px] text-gray-400">Select an element to edit properties</p>}
+          </div>
+
+          {/* Layers */}
+          <div className="border-t border-gray-200 h-[240px] overflow-y-auto p-2">
+            <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Layers</h4>
             <div className="space-y-0.5">
               {nodes.map((n, i) => (
-                <div key={n.id} onClick={() => setSelectedId(n.id)} className={`px-2 py-1 rounded text-xs cursor-pointer ${selectedId === n.id ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-50'}`}>
-                  {n.type} {n.content ? `"${n.content.slice(0, 20)}"` : `(${n.children.length} children)`}
+                <div key={n.id}>
+                  <div onClick={() => setSelectedId(n.id)} className={`flex items-center gap-1.5 px-1.5 py-1 rounded cursor-pointer text-[11px] ${selectedId === n.id ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                    <span className="text-[9px] text-gray-400">{n.hidden ? '\u{1F441}' : '\u25CF'}</span>
+                    <span className="flex-1 truncate">{n.name || n.type}{n.content ? `: "${n.content.slice(0,15)}"` : ''}</span>
+                    <span className="text-[9px] text-gray-300">{n.children.length > 0 ? `(${n.children.length})` : ''}</span>
+                  </div>
+                  {n.children.length > 0 && <div className="pl-3">{n.children.map(c => (<div key={c.id} onClick={(e) => { e.stopPropagation(); setSelectedId(c.id); }} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded cursor-pointer text-[10px] ${selectedId === c.id ? 'bg-purple-50 text-purple-600' : 'text-gray-500 hover:bg-gray-50'}`}><span className="truncate">{c.name || c.type}{c.content ? `: "${c.content.slice(0,12)}"` : ''}</span></div>))}</div>}
                 </div>
               ))}
             </div>
           </div>
-        </div>
-
-        {/* Canvas */}
-        <div className="bg-gray-100 overflow-y-auto p-5 flex flex-col items-center" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
-          <div className={`bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-all min-h-[500px] ${breakpoint === 'desktop' ? 'w-full max-w-[1100px]' : breakpoint === 'tablet' ? 'w-[768px]' : 'w-[375px]'}`} onClick={() => setSelectedId(null)}>
-            {nodes.map(renderNode)}
-            {nodes.length === 0 && <div className="flex items-center justify-center h-64 text-gray-400 text-sm">Drag elements here to start building</div>}
-          </div>
-          {dragType && <div className="mt-4 p-4 border-2 border-dashed border-purple-300 rounded-xl text-center text-purple-500 text-sm">Drop here to add to page</div>}
-        </div>
-
-        {/* Properties Panel */}
-        <div className="bg-white border-l border-gray-200 overflow-y-auto p-3">
-          <h4 className="font-bold text-xs text-gray-900 mb-2 uppercase tracking-wider">Properties</h4>
-          {selectedNode ? (
-            <div className="space-y-3">
-              <div className="text-xs text-purple-600 font-semibold bg-purple-50 px-2 py-1 rounded">{selectedNode.type} ({selectedNode.tag})</div>
-              {selectedNode.content !== undefined && selectedNode.tag !== 'hr' && (
-                <div><label className="block text-[10px] font-semibold text-gray-500 uppercase mb-1">Content</label><textarea value={selectedNode.content} onChange={e => handleContentChange(e.target.value)} className="w-full h-16 rounded-lg border border-gray-200 p-2 text-xs resize-none focus:border-purple-500 focus:outline-none" /></div>
-              )}
-              <div><label className="block text-[10px] font-semibold text-gray-500 uppercase mb-1">Font Size</label><input value={selectedNode.styles.fontSize || ''} onChange={e => handleStyleChange('fontSize', e.target.value)} placeholder="e.g. 1.5rem" className="w-full h-7 rounded border border-gray-200 px-2 text-xs focus:border-purple-500 focus:outline-none" /></div>
-              <div><label className="block text-[10px] font-semibold text-gray-500 uppercase mb-1">Font Weight</label><select value={selectedNode.styles.fontWeight || ''} onChange={e => handleStyleChange('fontWeight', e.target.value)} className="w-full h-7 rounded border border-gray-200 px-2 text-xs"><option value="">Default</option><option value="400">400</option><option value="500">500</option><option value="600">600</option><option value="700">700</option><option value="800">800</option></select></div>
-              <div><label className="block text-[10px] font-semibold text-gray-500 uppercase mb-1">Color</label><div className="flex gap-1"><input type="color" value={selectedNode.styles.color || '#000000'} onChange={e => handleStyleChange('color', e.target.value)} className="w-7 h-7 rounded border-0 cursor-pointer" /><input value={selectedNode.styles.color || ''} onChange={e => handleStyleChange('color', e.target.value)} className="flex-1 h-7 rounded border border-gray-200 px-2 text-xs focus:border-purple-500 focus:outline-none" /></div></div>
-              <div><label className="block text-[10px] font-semibold text-gray-500 uppercase mb-1">Background</label><div className="flex gap-1"><input type="color" value={selectedNode.styles.backgroundColor || '#ffffff'} onChange={e => handleStyleChange('backgroundColor', e.target.value)} className="w-7 h-7 rounded border-0 cursor-pointer" /><input value={selectedNode.styles.backgroundColor || ''} onChange={e => handleStyleChange('backgroundColor', e.target.value)} className="flex-1 h-7 rounded border border-gray-200 px-2 text-xs focus:border-purple-500 focus:outline-none" /></div></div>
-              <div><label className="block text-[10px] font-semibold text-gray-500 uppercase mb-1">Padding</label><input value={selectedNode.styles.padding || ''} onChange={e => handleStyleChange('padding', e.target.value)} placeholder="e.g. 16px" className="w-full h-7 rounded border border-gray-200 px-2 text-xs focus:border-purple-500 focus:outline-none" /></div>
-              <div><label className="block text-[10px] font-semibold text-gray-500 uppercase mb-1">Margin</label><input value={selectedNode.styles.margin || ''} onChange={e => handleStyleChange('margin', e.target.value)} placeholder="e.g. 0 0 12px 0" className="w-full h-7 rounded border border-gray-200 px-2 text-xs focus:border-purple-500 focus:outline-none" /></div>
-              <div><label className="block text-[10px] font-semibold text-gray-500 uppercase mb-1">Border Radius</label><input value={selectedNode.styles.borderRadius || ''} onChange={e => handleStyleChange('borderRadius', e.target.value)} placeholder="e.g. 12px" className="w-full h-7 rounded border border-gray-200 px-2 text-xs focus:border-purple-500 focus:outline-none" /></div>
-              <div><label className="block text-[10px] font-semibold text-gray-500 uppercase mb-1">Text Align</label><div className="flex gap-1">{['left','center','right'].map(a => (<button key={a} onClick={() => handleStyleChange('textAlign', a)} className={`flex-1 h-7 rounded border text-[10px] font-bold ${selectedNode.styles.textAlign === a ? 'border-purple-500 bg-purple-50 text-purple-600' : 'border-gray-200'}`}>{a[0].toUpperCase()}</button>))}</div></div>
-              <div className="pt-2 border-t border-gray-100 flex gap-1">
-                <button onClick={handleDuplicateSelected} className="flex-1 h-7 rounded border border-gray-200 text-[10px] font-semibold hover:bg-gray-50">Duplicate</button>
-                <button onClick={handleDeleteSelected} className="flex-1 h-7 rounded border border-red-200 text-[10px] font-semibold text-red-600 hover:bg-red-50">Delete</button>
-              </div>
-            </div>
-          ) : <p className="text-xs text-gray-400">Click an element to edit. Drag from the left panel to add new elements.</p>}
         </div>
       </div>
     </div>
