@@ -4,6 +4,7 @@ import { PrismaModule } from './common/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { PagesModule } from './modules/pages/pages.module';
+import { BuilderModule } from './modules/builder/builder.module';
 import { MediaModule } from './modules/media/media.module';
 import { UsersModule } from './modules/users/users.module';
 import { MenusModule } from './modules/menus/menus.module';
@@ -18,6 +19,7 @@ import { HealthModule } from './modules/health/health.module';
     AuthModule,
     ProjectsModule,
     PagesModule,
+    BuilderModule,
     MediaModule,
     UsersModule,
     MenusModule,

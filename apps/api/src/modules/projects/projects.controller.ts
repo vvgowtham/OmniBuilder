@@ -13,7 +13,7 @@ export class ProjectsController {
   }
 
   @Get()
-  findAll(@Query('organizationId') orgId: string) {
+  findAll(@Query('organizationId') orgId?: string) {
     return this.projects.findAll(orgId);
   }
 
@@ -30,5 +30,10 @@ export class ProjectsController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.projects.remove(id);
+  }
+
+  @Post(':id/duplicate')
+  duplicate(@Param('id') id: string, @Request() req: any) {
+    return this.projects.duplicate(id, req.user.sub);
   }
 }

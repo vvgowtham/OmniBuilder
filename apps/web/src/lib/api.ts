@@ -7,7 +7,10 @@ function getToken(): string | null {
 
 export async function apiFetch<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
-  const headers: any = { 'Content-Type': 'application/json', ...options.headers };
+  const headers: any = { ...options.headers };
+  if (!options.body || !(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
   if (token && token !== 'demo-token') headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
@@ -45,6 +48,7 @@ export const api = {
   createProject: (data: any) => apiFetch('/projects', { method: 'POST', body: JSON.stringify(data) }),
   updateProject: (id: string, data: any) => apiFetch(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteProject: (id: string) => apiFetch(`/projects/${id}`, { method: 'DELETE' }),
+  duplicateProject: (id: string) => apiFetch(`/projects/${id}/duplicate`, { method: 'POST' }),
 
   // Pages
   getPages: (projectId?: string) => apiFetch(`/pages${projectId ? `?projectId=${projectId}` : ''}`),
@@ -54,10 +58,18 @@ export const api = {
   deletePage: (id: string) => apiFetch(`/pages/${id}`, { method: 'DELETE' }),
   publishPage: (id: string) => apiFetch(`/pages/${id}/publish`, { method: 'POST' }),
 
+  // Builder
+  saveBuilderContent: (pageId: string, content: any) => apiFetch(`/builder/pages/${pageId}/save`, { method: 'POST', body: JSON.stringify({ content }) }),
+  loadBuilderContent: (pageId: string) => apiFetch(`/builder/pages/${pageId}/load`),
+  publishBuilderPage: (pageId: string) => apiFetch(`/builder/pages/${pageId}/publish`, { method: 'POST' }),
+  getBuilderVersions: (pageId: string) => apiFetch(`/builder/pages/${pageId}/versions`),
+  getPublishedPage: (slug: string) => apiFetch(`/builder/render/${slug}`),
+
   // Media
   getMedia: (projectId?: string) => apiFetch(`/media${projectId ? `?projectId=${projectId}` : ''}`),
-  createMedia: (data: any) => apiFetch('/media', { method: 'POST', body: JSON.stringify(data) }),
+  uploadMedia: (formData: FormData) => apiFetch('/media/upload', { method: 'POST', body: formData }),
   deleteMedia: (id: string) => apiFetch(`/media/${id}`, { method: 'DELETE' }),
+  updateMedia: (id: string, data: any) => apiFetch(`/media/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // Users
   getUsers: (search?: string) => apiFetch(`/users${search ? `?search=${search}` : ''}`),
@@ -68,7 +80,10 @@ export const api = {
 
   // Menus
   getMenus: (projectId?: string) => apiFetch(`/menus${projectId ? `?projectId=${projectId}` : ''}`),
+  getMenu: (id: string) => apiFetch(`/menus/${id}`),
   createMenu: (data: any) => apiFetch('/menus', { method: 'POST', body: JSON.stringify(data) }),
+  updateMenu: (id: string, data: any) => apiFetch(`/menus/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteMenu: (id: string) => apiFetch(`/menus/${id}`, { method: 'DELETE' }),
   addMenuItem: (menuId: string, data: any) => apiFetch(`/menus/${menuId}/items`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Forms
@@ -76,6 +91,7 @@ export const api = {
   createForm: (data: any) => apiFetch('/forms', { method: 'POST', body: JSON.stringify(data) }),
   deleteForm: (id: string) => apiFetch(`/forms/${id}`, { method: 'DELETE' }),
   getFormSubmissions: (formId: string) => apiFetch(`/forms/${formId}/submissions`),
+  submitForm: (formId: string, data: any) => apiFetch(`/forms/${formId}/submit`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Health
   health: () => apiFetch('/health'),
