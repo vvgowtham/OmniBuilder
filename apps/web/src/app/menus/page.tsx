@@ -1,110 +1,136 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { useState, useEffect } from 'react';
+import LayoutShell from '../components/layout-shell';
 
-interface MenuItem { id: string; label: string; targetType: string; targetRef: string; sortOrder: number; children?: MenuItem[]; }
-interface Menu { id: string; name: string; locationKey: string; items: MenuItem[]; }
+interface MenuItem { id: string; label: string; url: string; children: MenuItem[]; }
+interface Menu { id: string; name: string; location: string; items: MenuItem[]; }
 
 export default function MenusPage() {
-  const [menus, setMenus] = useState<Menu[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [menuName, setMenuName] = useState('');
-  const [location, setLocation] = useState('primary');
-  const [creating, setCreating] = useState(false);
-  const [activeMenu, setActiveMenu] = useState<Menu | null>(null);
+  const [menus, setMenus] = useState<Menu[]>(() => {
+    if (typeof window !== 'undefined') {
+      const s = localStorage.getItem('omni-menus');
+      if (s) try { return JSON.parse(s); } catch {}
+    }
+    return [{ id: 'm1', name: 'Main Menu', location: 'primary', items: [
+      { id: 'i1', label: 'Home', url: '/', children: [] },
+      { id: 'i2', label: 'About', url: '/about', children: [] },
+      { id: 'i3', label: 'Services', url: '/services', children: [{ id: 'i3a', label: 'Web Design', url: '/services/web', children: [] }, { id: 'i3b', label: 'Development', url: '/services/dev', children: [] }] },
+      { id: 'i4', label: 'Contact', url: '/contact', children: [] },
+    ]}, { id: 'm2', name: 'Footer Menu', location: 'footer', items: [
+      { id: 'f1', label: 'Privacy', url: '/privacy', children: [] },
+      { id: 'f2', label: 'Terms', url: '/terms', children: [] },
+    ]}];
+  });
+  const [activeMenu, setActiveMenu] = useState<string>('m1');
   const [newLabel, setNewLabel] = useState('');
   const [newUrl, setNewUrl] = useState('/');
+  const [showCreate, setShowCreate] = useState(false);
+  const [newMenuName, setNewMenuName] = useState('');
 
-  const loadMenus = async () => {
-    setLoading(true);
-    try { const data = await api.getMenus(); setMenus(data); if (data.length > 0 && !activeMenu) setActiveMenu(data[0]); } catch { setMenus([]); }
-    setLoading(false);
+  const save = (m: Menu[]) => { setMenus(m); localStorage.setItem('omni-menus', JSON.stringify(m)); };
+
+  const menu = menus.find(m => m.id === activeMenu);
+
+  const addItem = () => {
+    if (!newLabel.trim() || !menu) return;
+    const item: MenuItem = { id: 'i' + Date.now(), label: newLabel, url: newUrl, children: [] };
+    save(menus.map(m => m.id === activeMenu ? {...m, items: [...m.items, item]} : m));
+    setNewLabel(''); setNewUrl('/');
   };
 
-  useEffect(() => { loadMenus(); }, []);
-
-  const handleCreateMenu = async () => {
-    if (!menuName.trim()) return;
-    setCreating(true);
-    try {
-      const projectId = localStorage.getItem('currentProjectId') || 'default';
-      await api.createMenu({ name: menuName, locationKey: location, projectId });
-      setMenuName(''); setShowCreate(false);
-      await loadMenus();
-    } catch (e: any) { alert(e.message); }
-    setCreating(false);
+  const deleteItem = (itemId: string) => {
+    const removeItem = (items: MenuItem[]): MenuItem[] => items.filter(i => i.id !== itemId).map(i => ({...i, children: removeItem(i.children)}));
+    save(menus.map(m => m.id === activeMenu ? {...m, items: removeItem(m.items)} : m));
   };
 
-  const handleAddItem = async () => {
-    if (!activeMenu || !newLabel.trim()) return;
-    try {
-      await api.addMenuItem(activeMenu.id, { label: newLabel, targetType: 'url', targetRef: newUrl, sortOrder: activeMenu.items.length });
-      setNewLabel(''); setNewUrl('/');
-      await loadMenus();
-      const updated = menus.find(m => m.id === activeMenu.id);
-      if (updated) setActiveMenu(updated);
-    } catch (e: any) { alert(e.message); }
+  const moveItem = (itemId: string, dir: -1|1) => {
+    if (!menu) return;
+    const items = [...menu.items];
+    const i = items.findIndex(x => x.id === itemId);
+    const ni = i + dir;
+    if (ni < 0 || ni >= items.length) return;
+    [items[i], items[ni]] = [items[ni], items[i]];
+    save(menus.map(m => m.id === activeMenu ? {...m, items} : m));
   };
 
-  const handleDeleteMenu = async (id: string) => {
+  const createMenu = () => {
+    if (!newMenuName.trim()) return;
+    const m: Menu = { id: 'm' + Date.now(), name: newMenuName, location: 'custom', items: [] };
+    save([...menus, m]);
+    setActiveMenu(m.id);
+    setNewMenuName(''); setShowCreate(false);
+  };
+
+  const deleteMenu = (id: string) => {
     if (!confirm('Delete this menu?')) return;
-    try { await api.deleteMenu(id); if (activeMenu?.id === id) setActiveMenu(null); await loadMenus(); } catch {}
+    const updated = menus.filter(m => m.id !== id);
+    save(updated);
+    if (activeMenu === id) setActiveMenu(updated[0]?.id || '');
   };
+
+  const renderItem = (item: MenuItem, depth: number) => (
+    <div key={item.id} style={{marginLeft: depth * 20 + 'px'}}>
+      <div className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg mb-1 bg-white group">
+        <span className="text-gray-400 cursor-grab text-xs">&#9776;</span>
+        <span className="flex-1 text-sm font-medium">{item.label}</span>
+        <span className="text-xs text-gray-400">{item.url}</span>
+        <div className="hidden group-hover:flex gap-1">
+          <button onClick={() => moveItem(item.id, -1)} className="w-5 h-5 rounded bg-gray-100 text-[9px] flex items-center justify-center">^</button>
+          <button onClick={() => moveItem(item.id, 1)} className="w-5 h-5 rounded bg-gray-100 text-[9px] flex items-center justify-center">v</button>
+          <button onClick={() => deleteItem(item.id)} className="w-5 h-5 rounded bg-red-50 text-red-600 text-[9px] flex items-center justify-center">x</button>
+        </div>
+      </div>
+      {item.children.map(c => renderItem(c, depth + 1))}
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div><h1 className="text-2xl font-bold text-gray-900">Menus</h1><p className="text-gray-500 text-sm">Manage navigation menus</p></div>
-        <button onClick={() => setShowCreate(true)} className="h-9 px-4 rounded-lg bg-purple-600 text-white text-sm font-semibold">+ Create Menu</button>
-      </div>
-
-      {showCreate && (
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input value={menuName} onChange={e => setMenuName(e.target.value)} placeholder="Menu name" className="h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-purple-500 focus:outline-none" />
-            <select value={location} onChange={e => setLocation(e.target.value)} className="h-10 rounded-lg border border-gray-200 px-3 text-sm"><option value="primary">Primary Navigation</option><option value="footer">Footer</option><option value="mobile">Mobile</option></select>
-          </div>
-          <div className="flex gap-2 mt-3">
-            <button onClick={handleCreateMenu} disabled={creating} className="h-9 px-4 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-50">{creating ? 'Creating...' : 'Create'}</button>
-            <button onClick={() => setShowCreate(false)} className="h-9 px-4 rounded-lg border border-gray-200 text-sm">Cancel</button>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-5">
-        <div className="space-y-2">
-          {loading ? <div className="text-gray-400 text-sm">Loading...</div> : menus.map(m => (
-            <div key={m.id} onClick={() => setActiveMenu(m)} className={`p-3 rounded-xl border cursor-pointer transition-all ${activeMenu?.id === m.id ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white hover:border-purple-300'}`}>
-              <div className="flex justify-between items-center">
-                <div><div className="font-semibold text-sm">{m.name}</div><div className="text-xs text-gray-500">{m.locationKey} &middot; {m.items?.length || 0} items</div></div>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteMenu(m.id); }} className="text-xs text-red-500">&times;</button>
-              </div>
-            </div>
-          ))}
+    <LayoutShell>
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div><h1 className="text-xl font-bold text-gray-900">Menus</h1><p className="text-gray-500 text-xs">Manage navigation menus</p></div>
+          <button onClick={() => setShowCreate(true)} className="h-8 px-3 rounded-lg bg-purple-600 text-white text-xs font-semibold">+ New Menu</button>
         </div>
 
-        {activeMenu && (
-          <div className="bg-white border border-gray-200 rounded-2xl p-5">
-            <h3 className="font-bold text-gray-900 mb-4">{activeMenu.name} - Items</h3>
-            <div className="space-y-2 mb-4">
-              {activeMenu.items?.length ? activeMenu.items.map((item, i) => (
-                <div key={item.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
-                  <span className="text-gray-400 cursor-grab">&#9776;</span>
-                  <span className="text-sm font-medium flex-1">{item.label}</span>
-                  <span className="text-xs text-gray-400">{item.targetRef}</span>
-                </div>
-              )) : <p className="text-sm text-gray-400">No items yet</p>}
-            </div>
-            <div className="flex gap-2">
-              <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Label" className="flex-1 h-9 rounded-lg border border-gray-200 px-3 text-sm focus:border-purple-500 focus:outline-none" />
-              <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="URL" className="w-32 h-9 rounded-lg border border-gray-200 px-3 text-sm focus:border-purple-500 focus:outline-none" />
-              <button onClick={handleAddItem} className="h-9 px-4 rounded-lg bg-purple-600 text-white text-xs font-semibold">Add</button>
-            </div>
+        {showCreate && (
+          <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 flex gap-2">
+            <input value={newMenuName} onChange={e => setNewMenuName(e.target.value)} placeholder="Menu name" className="flex-1 h-9 rounded-lg border border-gray-200 px-3 text-sm focus:border-purple-500 focus:outline-none" />
+            <button onClick={createMenu} className="h-9 px-3 rounded-lg bg-purple-600 text-white text-xs font-semibold">Create</button>
+            <button onClick={() => setShowCreate(false)} className="h-9 px-3 rounded-lg border border-gray-200 text-xs">Cancel</button>
           </div>
         )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-[250px_1fr] gap-5">
+          {/* Menu list */}
+          <div className="space-y-1">
+            {menus.map(m => (
+              <div key={m.id} onClick={() => setActiveMenu(m.id)} className={`p-3 rounded-xl border cursor-pointer transition-all ${activeMenu === m.id ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white hover:border-purple-300'}`}>
+                <div className="flex justify-between">
+                  <div className="font-semibold text-sm">{m.name}</div>
+                  <button onClick={e => { e.stopPropagation(); deleteMenu(m.id); }} className="text-[10px] text-red-500">x</button>
+                </div>
+                <div className="text-[10px] text-gray-500">{m.location} - {m.items.length} items</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Menu editor */}
+          {menu && (
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <h3 className="font-bold text-gray-900 mb-3">{menu.name}</h3>
+              <div className="space-y-0.5 mb-4">
+                {menu.items.length > 0 ? menu.items.map(item => renderItem(item, 0)) : <p className="text-sm text-gray-400">No items. Add one below.</p>}
+              </div>
+              <div className="flex gap-2 border-t border-gray-100 pt-3">
+                <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Label" className="flex-1 h-8 rounded-lg border border-gray-200 px-2 text-sm focus:border-purple-500 focus:outline-none" />
+                <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="URL" className="w-28 h-8 rounded-lg border border-gray-200 px-2 text-sm focus:border-purple-500 focus:outline-none" />
+                <button onClick={addItem} className="h-8 px-3 rounded-lg bg-purple-600 text-white text-xs font-semibold">Add Item</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </LayoutShell>
   );
 }
