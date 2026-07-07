@@ -1,0 +1,566 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  plan      String   @default("free")
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members  OrganizationUser[]
+  projects Project[]
+  roles    Role[]
+  audits   AuditLog[]
+
+  @@map("organizations")
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  fullName     String    @map("full_name")
+  avatarUrl    String?   @map("avatar_url")
+  status       String    @default("active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  memberships     OrganizationUser[]
+  createdProjects Project[]    @relation("ProjectCreator")
+  changeSets      ChangeSet[]
+  audits          AuditLog[]
+
+  @@map("users")
+}
+
+model OrganizationUser {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  roleId         String   @map("role_id") @db.Uuid
+  joinedAt       DateTime @default(now()) @map("joined_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@map("organization_users")
+}
+
+model Role {
+  id             String  @id @default(uuid()) @db.Uuid
+  organizationId String? @map("organization_id") @db.Uuid
+  name           String
+  key            String
+  isSystem       Boolean @default(false) @map("is_system")
+
+  organization Organization?     @relation(fields: [organizationId], references: [id])
+  permissions  RolePermission[]
+  members      OrganizationUser[]
+
+  @@unique([organizationId, key])
+  @@map("roles")
+}
+
+model Permission {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique
+  description String
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String @id @default(uuid()) @db.Uuid
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Project {
+  id                String   @id @default(uuid()) @db.Uuid
+  organizationId    String   @map("organization_id") @db.Uuid
+  name              String
+  slug              String
+  description       String?
+  sourceType        String?  @map("source_type")
+  detectedFramework String?  @map("detected_framework")
+  detectedRuntime   String?  @map("detected_runtime")
+  detectedLanguage  String?  @map("detected_language")
+  status            String   @default("created")
+  repoUrl           String?  @map("repo_url")
+  rootPath          String?  @map("root_path")
+  createdById       String   @map("created_by_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  createdBy    User         @relation("ProjectCreator", fields: [createdById], references: [id])
+
+  sources      ProjectSource[]
+  imports      Import[]
+  files        ProjectFile[]
+  technologies DetectedTechnology[]
+  routes       Route[]
+  pages        Page[]
+  layouts      Layout[]
+  components   Component[]
+  nodes        PageNode[]
+  tokens       DesignToken[]
+  styleRules   StyleRule[]
+  contentTypes ContentType[]
+  mediaAssets  MediaAsset[]
+  menus        Menu[]
+  forms        Form[]
+  changeSets   ChangeSet[]
+  snapshots    Snapshot[]
+  environments ProjectEnvironment[]
+  analysisRuns AnalysisRun[]
+
+  @@unique([organizationId, slug])
+  @@map("projects")
+}
+
+model ProjectEnvironment {
+  id                 String  @id @default(uuid()) @db.Uuid
+  projectId          String  @map("project_id") @db.Uuid
+  name               String
+  branchName         String? @map("branch_name")
+  deploymentProvider String? @map("deployment_provider")
+  deploymentConfig   Json?   @map("deployment_config")
+  isDefault          Boolean @default(false) @map("is_default")
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deployments Deployment[]
+
+  @@map("project_environments")
+}
+
+model ProjectSource {
+  id             String   @id @default(uuid()) @db.Uuid
+  projectId      String   @map("project_id") @db.Uuid
+  kind           String
+  sourceRef      String   @map("source_ref")
+  credentialsRef String?  @map("credentials_ref")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  imports Import[]
+
+  @@map("project_sources")
+}
+
+model Import {
+  id          String    @id @default(uuid()) @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  sourceId    String    @map("source_id") @db.Uuid
+  status      String    @default("queued")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  errorLog    String?   @map("error_log")
+  summary     Json?
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  source       ProjectSource @relation(fields: [sourceId], references: [id])
+  analysisRuns AnalysisRun[]
+
+  @@map("imports")
+}
+
+model ProjectFile {
+  id        String  @id @default(uuid()) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  path      String
+  extension String?
+  mimeType  String? @map("mime_type")
+  sizeBytes Int?    @map("size_bytes")
+  checksum  String?
+  category  String  @default("unknown")
+  isBinary  Boolean @default(false) @map("is_binary")
+
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  depsSource   FileDependency[] @relation("DepSource")
+  depsTarget   FileDependency[] @relation("DepTarget")
+  routes       Route[]
+  layouts      Layout[]
+  components   Component[]
+  styleRules   StyleRule[]
+  filePatches  FilePatch[]
+
+  @@unique([projectId, path])
+  @@map("project_files")
+}
+
+model FileDependency {
+  id             String @id @default(uuid()) @db.Uuid
+  projectId      String @map("project_id") @db.Uuid
+  sourceFileId   String @map("source_file_id") @db.Uuid
+  targetFileId   String @map("target_file_id") @db.Uuid
+  dependencyType String @map("dependency_type")
+
+  sourceFile ProjectFile @relation("DepSource", fields: [sourceFileId], references: [id], onDelete: Cascade)
+  targetFile ProjectFile @relation("DepTarget", fields: [targetFileId], references: [id], onDelete: Cascade)
+
+  @@map("file_dependencies")
+}
+
+model AnalysisRun {
+  id          String    @id @default(uuid()) @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  importId    String?   @map("import_id") @db.Uuid
+  adapterKey  String?   @map("adapter_key")
+  status      String    @default("queued")
+  results     Json?
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  import  Import? @relation(fields: [importId], references: [id])
+
+  @@map("analysis_runs")
+}
+
+model DetectedTechnology {
+  id         String @id @default(uuid()) @db.Uuid
+  projectId  String @map("project_id") @db.Uuid
+  category   String
+  name       String
+  version    String?
+  confidence Float  @default(0)
+  evidence   Json?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("detected_technologies")
+}
+
+model Route {
+  id           String  @id @default(uuid()) @db.Uuid
+  projectId    String  @map("project_id") @db.Uuid
+  path         String
+  routeName    String? @map("route_name")
+  method       String  @default("GET")
+  sourceFileId String? @map("source_file_id") @db.Uuid
+  layoutId     String? @map("layout_id") @db.Uuid
+  pageId       String? @map("page_id") @db.Uuid
+  metadata     Json?
+
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceFile ProjectFile? @relation(fields: [sourceFileId], references: [id])
+  layout     Layout?      @relation(fields: [layoutId], references: [id])
+  page       Page?        @relation(fields: [pageId], references: [id])
+
+  @@unique([projectId, path, method])
+  @@map("routes")
+}
+
+model Page {
+  id        String   @id @default(uuid()) @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  title     String
+  slug      String
+  pageType  String   @default("static") @map("page_type")
+  status    String   @default("draft")
+  seoTitle  String?  @map("seo_title")
+  seoDesc   String?  @map("seo_desc")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  routes  Route[]
+  nodes   PageNode[]
+
+  @@unique([projectId, slug])
+  @@map("pages")
+}
+
+model Layout {
+  id             String  @id @default(uuid()) @db.Uuid
+  projectId      String  @map("project_id") @db.Uuid
+  name           String
+  sourceFileId   String? @map("source_file_id") @db.Uuid
+  parentLayoutId String? @map("parent_layout_id") @db.Uuid
+  metadata       Json?
+
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceFile   ProjectFile? @relation(fields: [sourceFileId], references: [id])
+  parentLayout Layout?      @relation("LayoutHierarchy", fields: [parentLayoutId], references: [id])
+  childLayouts Layout[]     @relation("LayoutHierarchy")
+  routes       Route[]
+  nodes        PageNode[]
+
+  @@map("layouts")
+}
+
+model Component {
+  id            String  @id @default(uuid()) @db.Uuid
+  projectId     String  @map("project_id") @db.Uuid
+  name          String
+  componentKey  String  @map("component_key")
+  sourceFileId  String? @map("source_file_id") @db.Uuid
+  componentType String  @default("ui") @map("component_type")
+  propsSchema   Json?   @map("props_schema")
+  metadata      Json?
+
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceFile ProjectFile? @relation(fields: [sourceFileId], references: [id])
+  nodes      PageNode[]
+
+  @@unique([projectId, componentKey])
+  @@map("components")
+}
+
+model PageNode {
+  id           String  @id @default(uuid()) @db.Uuid
+  projectId    String  @map("project_id") @db.Uuid
+  pageId       String? @map("page_id") @db.Uuid
+  layoutId     String? @map("layout_id") @db.Uuid
+  parentNodeId String? @map("parent_node_id") @db.Uuid
+  componentId  String? @map("component_id") @db.Uuid
+  nodeType     String  @map("node_type")
+  sortOrder    Int     @default(0) @map("sort_order")
+  props        Json?
+  bindings     Json?
+  styles       Json?
+  sourceMap    Json?   @map("source_map")
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  page       Page?      @relation(fields: [pageId], references: [id])
+  layout     Layout?    @relation(fields: [layoutId], references: [id])
+  parentNode PageNode?  @relation("NodeTree", fields: [parentNodeId], references: [id])
+  children   PageNode[] @relation("NodeTree")
+  component  Component? @relation(fields: [componentId], references: [id])
+
+  @@map("page_nodes")
+}
+
+model DesignToken {
+  id        String @id @default(uuid()) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  tokenType String @map("token_type")
+  name      String
+  value     String
+  metadata  Json?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, tokenType, name])
+  @@map("design_tokens")
+}
+
+model StyleRule {
+  id           String  @id @default(uuid()) @db.Uuid
+  projectId    String  @map("project_id") @db.Uuid
+  nodeId       String? @map("node_id") @db.Uuid
+  componentId  String? @map("component_id") @db.Uuid
+  selector     String?
+  declarations Json
+  breakpoint   String?
+  pseudoState  String? @map("pseudo_state")
+  sourceFileId String? @map("source_file_id") @db.Uuid
+
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceFile ProjectFile? @relation(fields: [sourceFileId], references: [id])
+
+  @@map("style_rules")
+}
+
+model ContentType {
+  id        String @id @default(uuid()) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  name      String
+  slug      String
+  schema    Json
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  entries ContentEntry[]
+
+  @@unique([projectId, slug])
+  @@map("content_types")
+}
+
+model ContentEntry {
+  id            String    @id @default(uuid()) @db.Uuid
+  contentTypeId String    @map("content_type_id") @db.Uuid
+  status        String    @default("draft")
+  slug          String
+  title         String
+  data          Json
+  publishedAt   DateTime? @map("published_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  contentType ContentType @relation(fields: [contentTypeId], references: [id], onDelete: Cascade)
+
+  @@map("content_entries")
+}
+
+model MediaAsset {
+  id         String   @id @default(uuid()) @db.Uuid
+  projectId  String   @map("project_id") @db.Uuid
+  fileName   String   @map("file_name")
+  storageKey String   @map("storage_key")
+  mimeType   String   @map("mime_type")
+  width      Int?
+  height     Int?
+  sizeBytes  Int      @map("size_bytes")
+  altText    String?  @map("alt_text")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("media_assets")
+}
+
+model Menu {
+  id          String @id @default(uuid()) @db.Uuid
+  projectId   String @map("project_id") @db.Uuid
+  name        String
+  locationKey String @map("location_key")
+  metadata    Json?
+
+  project Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   MenuItem[]
+
+  @@map("menus")
+}
+
+model MenuItem {
+  id           String  @id @default(uuid()) @db.Uuid
+  menuId       String  @map("menu_id") @db.Uuid
+  parentItemId String? @map("parent_item_id") @db.Uuid
+  label        String
+  targetType   String  @map("target_type")
+  targetRef    String  @map("target_ref")
+  sortOrder    Int     @default(0) @map("sort_order")
+  settings     Json?
+
+  menu       Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  parentItem MenuItem?  @relation("MenuTree", fields: [parentItemId], references: [id])
+  children   MenuItem[] @relation("MenuTree")
+
+  @@map("menu_items")
+}
+
+model Form {
+  id        String @id @default(uuid()) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  name      String
+  schema    Json
+  settings  Json?
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  submissions FormSubmission[]
+
+  @@map("forms")
+}
+
+model FormSubmission {
+  id        String   @id @default(uuid()) @db.Uuid
+  formId    String   @map("form_id") @db.Uuid
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  form Form @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@map("form_submissions")
+}
+
+model ChangeSet {
+  id          String   @id @default(uuid()) @db.Uuid
+  projectId   String   @map("project_id") @db.Uuid
+  createdById String   @map("created_by_id") @db.Uuid
+  source      String
+  summary     String?
+  status      String   @default("draft")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User        @relation(fields: [createdById], references: [id])
+  patches   FilePatch[]
+  snapshots Snapshot[]
+
+  @@map("change_sets")
+}
+
+model FilePatch {
+  id             String    @id @default(uuid()) @db.Uuid
+  changeSetId    String    @map("change_set_id") @db.Uuid
+  projectFileId  String    @map("project_file_id") @db.Uuid
+  patchType      String    @map("patch_type")
+  patchPayload   Json      @map("patch_payload")
+  beforeChecksum String    @map("before_checksum")
+  afterChecksum  String?   @map("after_checksum")
+  appliedAt      DateTime? @map("applied_at")
+
+  changeSet   ChangeSet   @relation(fields: [changeSetId], references: [id], onDelete: Cascade)
+  projectFile ProjectFile @relation(fields: [projectFileId], references: [id])
+
+  @@map("file_patches")
+}
+
+model Snapshot {
+  id          String   @id @default(uuid()) @db.Uuid
+  projectId   String   @map("project_id") @db.Uuid
+  changeSetId String?  @map("change_set_id") @db.Uuid
+  storageKey  String   @map("storage_key")
+  manifest    Json
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  changeSet ChangeSet? @relation(fields: [changeSetId], references: [id])
+
+  @@map("snapshots")
+}
+
+model Deployment {
+  id            String    @id @default(uuid()) @db.Uuid
+  environmentId String    @map("environment_id") @db.Uuid
+  status        String    @default("queued")
+  provider      String?
+  logs          String?
+  previewUrl    String?   @map("preview_url")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+
+  environment ProjectEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@map("deployments")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  projectId      String?  @map("project_id") @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  action         String
+  resourceType   String   @map("resource_type")
+  resourceId     String?  @map("resource_id")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  actor        User?        @relation(fields: [actorUserId], references: [id])
+
+  @@map("audit_logs")
+}
