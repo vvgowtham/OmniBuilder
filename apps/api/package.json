@@ -1,0 +1,47 @@
+{
+  "name": "omnibuilder-api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:prod": "node dist/main",
+    "migrate": "prisma migrate dev",
+    "seed": "ts-node prisma/seed.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.3.0",
+    "@nestjs/core": "^10.3.0",
+    "@nestjs/config": "^3.2.0",
+    "@nestjs/jwt": "^10.2.0",
+    "@nestjs/passport": "^10.0.3",
+    "@nestjs/platform-express": "^10.3.0",
+    "@nestjs/bull": "^10.1.0",
+    "@nestjs/swagger": "^7.3.0",
+    "@prisma/client": "^5.10.0",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "bcryptjs": "^2.4.3",
+    "bull": "^4.12.0",
+    "ioredis": "^5.3.0",
+    "class-validator": "^0.14.1",
+    "class-transformer": "^0.5.1",
+    "simple-git": "^3.22.0",
+    "decompress": "^4.2.1",
+    "got": "^14.0.0",
+    "cheerio": "^1.0.0",
+    "mime-types": "^2.1.35",
+    "uuid": "^9.0.0",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.3.0",
+    "@types/node": "^20.11.0",
+    "prisma": "^5.10.0",
+    "typescript": "^5.3.0",
+    "ts-node": "^10.9.0"
+  },
+  "prisma": { "seed": "ts-node prisma/seed.ts" }
+}
