@@ -6,8 +6,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import LayoutShell from '../components/layout-shell';
 
-interface PageItem { id?: string; name: string; slug: string; status?: string; html?: string; projectName?: string; }
-interface ImportedProject { id: string; name: string; pages: Array<{name:string;slug:string;html:string}>; }
+interface ImportedProject { id: string; name: string; pages: Array<{name:string;slug:string;html:string}>; media?: Array<any>; }
 
 export default function PagesPage() {
   const [apiPages, setApiPages] = useState<any[]>([]);
@@ -19,9 +18,7 @@ export default function PagesPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Load API pages
     api.getPages().then(setApiPages).catch(() => setApiPages([]));
-    // Load imported project pages
     const saved = localStorage.getItem('imported-projects');
     if (saved) try { setImportedProjects(JSON.parse(saved)); } catch {}
     setLoading(false);
@@ -29,10 +26,12 @@ export default function PagesPage() {
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
-    try { await api.createPage({title: newTitle}); setNewTitle(''); setShowCreate(false); const p = await api.getPages(); setApiPages(p); } catch {}
+    try { await api.createPage({title: newTitle}); setNewTitle(''); setShowCreate(false); setApiPages(await api.getPages()); } catch {}
   };
 
   const openInBuilder = (page: {name:string;slug:string;html?:string}) => {
+    // Clear old builder data and set new page
+    localStorage.removeItem('builder-nodes');
     localStorage.setItem('editing-page', JSON.stringify(page));
     router.push('/visual-builder');
   };
@@ -41,9 +40,6 @@ export default function PagesPage() {
     if (!confirm('Delete?')) return;
     try { await api.deletePage(id); setApiPages(await api.getPages()); } catch {}
   };
-
-  const allImportedPages = importedProjects.flatMap(p => p.pages.map(pg => ({...pg, projectName: p.name, projectId: p.id})));
-  const filteredImported = allImportedPages.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <LayoutShell>
@@ -57,48 +53,52 @@ export default function PagesPage() {
 
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search pages..." className="h-8 w-64 rounded-lg border border-gray-200 px-2 text-xs mb-4 focus:border-purple-500 focus:outline-none"/>
 
-        {/* Imported Project Pages - Grouped */}
-        {importedProjects.map(proj => (
-          <div key={proj.id} className="mb-6">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-5 h-5 rounded bg-purple-100 text-purple-600 flex items-center justify-center text-[9px] font-bold">W</div>
-              <h3 className="text-sm font-bold text-gray-900">{proj.name}</h3>
-              <span className="text-[10px] text-gray-400">{proj.pages.length} pages</span>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-              {proj.pages.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase())).map((page, i) => (
-                <div key={i} className="flex items-center justify-between px-4 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center text-[9px] text-gray-500">P</span>
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{page.name}</div>
-                      <div className="text-[10px] text-gray-400">/{page.slug}</div>
+        {/* Imported Projects with their pages */}
+        {importedProjects.map(proj => {
+          const filteredPages = (proj.pages || []).filter(p => !search || (p.name || '').toLowerCase().includes(search.toLowerCase()));
+          if (filteredPages.length === 0 && search) return null;
+          return (
+            <div key={proj.id} className="mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center text-[10px] font-bold">W</div>
+                <h3 className="text-sm font-bold text-gray-900">{proj.name}</h3>
+                <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{(proj.pages || []).length} pages</span>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                {filteredPages.map((page, i) => (
+                  <div key={i} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-all">
+                    <div className="flex items-center gap-3">
+                      <span className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-[10px] text-gray-500 font-semibold">{(i+1)}</span>
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{page.name || 'Untitled'}</div>
+                        <div className="text-[10px] text-gray-400">/{page.slug || ''}</div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={()=>openInBuilder(page)} className="text-[11px] text-purple-600 font-semibold bg-purple-50 px-3 py-1 rounded-lg hover:bg-purple-100 transition-all">Edit in Builder</button>
+                      <span className="text-[10px] text-green-600 font-semibold bg-green-50 px-2 py-1 rounded-lg">Imported</span>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={()=>openInBuilder(page)} className="text-[10px] text-purple-600 font-semibold bg-purple-50 px-2 py-1 rounded hover:bg-purple-100">Edit in Builder</button>
-                    <span className="text-[10px] text-green-600 font-semibold bg-green-50 px-2 py-1 rounded">Imported</span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* API Pages */}
         {apiPages.length > 0 && (
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-5 h-5 rounded bg-blue-100 text-blue-600 flex items-center justify-center text-[9px] font-bold">N</div>
+              <div className="w-6 h-6 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold">N</div>
               <h3 className="text-sm font-bold text-gray-900">Created Pages</h3>
             </div>
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
               {apiPages.map(p => (
-                <div key={p.id} className="flex items-center justify-between px-4 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50">
+                <div key={p.id} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
                   <div><div className="text-sm font-medium">{p.title}</div><div className="text-[10px] text-gray-400">/{p.slug}</div></div>
                   <div className="flex gap-2">
-                    <button onClick={()=>openInBuilder({name:p.title,slug:p.slug})} className="text-[10px] text-purple-600 font-semibold">Edit</button>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${p.status==='published'?'bg-green-100 text-green-700':'bg-yellow-100 text-yellow-700'}`}>{p.status}</span>
+                    <button onClick={()=>openInBuilder({name:p.title,slug:p.slug})} className="text-[11px] text-purple-600 font-semibold">Edit</button>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${p.status==='published'?'bg-green-100 text-green-700':'bg-yellow-100 text-yellow-700'}`}>{p.status}</span>
                     <button onClick={()=>handleDelete(p.id)} className="text-[10px] text-red-600 font-semibold">Del</button>
                   </div>
                 </div>
@@ -111,9 +111,7 @@ export default function PagesPage() {
           <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
             <p className="text-gray-400 mb-3">No pages yet</p>
             <div className="flex gap-2 justify-center">
-              <button onClick={()=>setShowCreate(true)} className="text-xs text-purple-600 font-semibold">Create a page</button>
-              <span className="text-gray-300">or</span>
-              <Link href="/import" className="text-xs text-purple-600 font-semibold">Import a website</Link>
+              <Link href="/import" className="text-xs text-purple-600 font-semibold bg-purple-50 px-3 py-1.5 rounded-lg">Import a Website</Link>
             </div>
           </div>
         )}
