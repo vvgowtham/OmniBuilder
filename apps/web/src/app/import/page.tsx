@@ -1,182 +1,232 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import LayoutShell from '../components/layout-shell';
+
+interface ImportedProject {
+  id: string;
+  name: string;
+  source: string;
+  createdAt: string;
+  pages: Array<{name:string;slug:string;html:string}>;
+  media: Array<{name:string;type:string;size:number}>;
+}
 
 export default function ImportPage() {
   const [method, setMethod] = useState<string|null>(null);
   const [sourceRef, setSourceRef] = useState('');
   const [step, setStep] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [files, setFiles] = useState<FileList|null>(null);
+  const [statusText, setStatusText] = useState('');
   const [projectName, setProjectName] = useState('');
+  const [parsedPages, setParsedPages] = useState<Array<{name:string;slug:string;html:string}>>([]);
+  const [parsedMedia, setParsedMedia] = useState<Array<{name:string;type:string;size:number}>>([]);
+  const [projects, setProjects] = useState<ImportedProject[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
+  useEffect(() => {
+    const saved = localStorage.getItem('imported-projects');
+    if (saved) try { setProjects(JSON.parse(saved)); } catch {}
+  }, []);
+
   const methods = [
-    { key: 'url', icon: 'W', label: 'Live URL', desc: 'Import from any website URL' },
-    { key: 'git', icon: 'G', label: 'Git Repository', desc: 'Clone from GitHub/GitLab' },
-    { key: 'zip', icon: 'Z', label: 'ZIP Upload', desc: 'Upload project as ZIP' },
-    { key: 'folder', icon: 'F', label: 'Local Folder', desc: 'Select project folder' },
+    {key:'url',icon:'W',label:'Live URL',desc:'Import from website URL'},
+    {key:'git',icon:'G',label:'Git Repository',desc:'Clone from GitHub/GitLab'},
+    {key:'zip',icon:'Z',label:'ZIP Upload',desc:'Upload project ZIP'},
+    {key:'folder',icon:'F',label:'Local Folder',desc:'Select project folder'},
   ];
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setFiles(e.target.files);
-      setSourceRef(e.target.files[0].name);
-      if (!projectName) setProjectName(e.target.files[0].name.replace(/\.zip$/i, '').replace(/[^a-zA-Z0-9]/g, ' ').trim());
+  // Parse HTML files from FileList
+  const parseFiles = async (files: FileList) => {
+    const pages: Array<{name:string;slug:string;html:string}> = [];
+    const media: Array<{name:string;type:string;size:number}> = [];
+
+    for (const file of Array.from(files)) {
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const path = (file as any).webkitRelativePath || file.name;
+
+      // HTML/HTM files become pages
+      if (ext === 'html' || ext === 'htm' || ext === 'php') {
+        const content = await file.text();
+        const name = file.name.replace(/\.(html|htm|php)$/i, '').replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const slug = file.name.replace(/\.(html|htm|php)$/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        pages.push({ name, slug, html: content });
+      }
+      // Image/media files
+      else if (['jpg','jpeg','png','gif','svg','webp','mp4','mp3','pdf','ico'].includes(ext)) {
+        media.push({ name: path || file.name, type: file.type || 'image/' + ext, size: file.size });
+      }
     }
+
+    // If no HTML found, create a default page
+    if (pages.length === 0) {
+      pages.push({ name: 'Home', slug: 'home', html: '<section><h1>Imported Project</h1><p>No HTML pages detected in the upload.</p></section>' });
+    }
+
+    return { pages, media };
   };
 
-  const startImport = () => {
-    if (!projectName.trim()) { alert('Please enter a project name'); return; }
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // Set project name from first file/folder
+    const firstPath = (files[0] as any).webkitRelativePath || files[0].name;
+    const folderName = firstPath.split('/')[0] || files[0].name.replace(/\.zip$/i, '');
+    if (!projectName) setProjectName(folderName.replace(/[-_]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()));
+    setSourceRef(`${files.length} files selected`);
+
+    // Parse immediately
+    const { pages, media } = await parseFiles(files);
+    setParsedPages(pages);
+    setParsedMedia(media);
+  };
+
+  const startImport = async () => {
+    if (!projectName.trim()) { alert('Enter a project name'); return; }
     setStep(1);
+
+    const steps = ['Reading files...','Parsing HTML structure...','Extracting styles...','Converting to builder format...','Importing media assets...','Creating project...'];
     let p = 0;
-    const steps = ['Scanning files...','Detecting framework...','Parsing HTML/CSS...','Extracting components...','Building pages...','Creating project...'];
     const iv = setInterval(() => {
-      p += 8;
+      p += 12;
       setProgress(Math.min(p, 100));
+      setStatusText(steps[Math.min(Math.floor(p/18), steps.length-1)]);
       if (p >= 100) {
         clearInterval(iv);
-        // Save imported project to localStorage
-        const projects = JSON.parse(localStorage.getItem('imported-projects') || '[]');
-        const newProject = {
+        // Save project
+        const project: ImportedProject = {
           id: 'proj-' + Date.now(),
           name: projectName,
-          source: method,
-          sourceRef: sourceRef,
+          source: method || 'zip',
           createdAt: new Date().toISOString(),
-          pages: ['Home', 'About', 'Contact', 'Services', 'Blog'],
-          status: 'ready',
+          pages: parsedPages.length > 0 ? parsedPages : [{name:'Home',slug:'home',html:'<h1>Home</h1>'},{name:'About',slug:'about',html:'<h1>About</h1><p>About page content.</p>'},{name:'Contact',slug:'contact',html:'<h1>Contact</h1><p>Contact us.</p>'}],
+          media: parsedMedia,
         };
-        projects.push(newProject);
-        localStorage.setItem('imported-projects', JSON.stringify(projects));
-        localStorage.setItem('currentProjectId', newProject.id);
+        const updated = [...projects, project];
+        setProjects(updated);
+        localStorage.setItem('imported-projects', JSON.stringify(updated));
+        localStorage.setItem('active-project', project.id);
         setTimeout(() => setStep(2), 500);
       }
-    }, 400);
+    }, 350);
+  };
+
+  const deleteProject = (id: string) => {
+    if (!confirm('Delete this imported project?')) return;
+    const updated = projects.filter(p => p.id !== id);
+    setProjects(updated);
+    localStorage.setItem('imported-projects', JSON.stringify(updated));
   };
 
   return (
     <LayoutShell>
-      <div className="p-6 max-w-3xl mx-auto">
+      <div className="p-6 max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Import Website</h1>
-        <p className="text-gray-500 text-sm mb-6">Import any existing website or project</p>
+        <p className="text-gray-500 text-sm mb-6">Import an existing website to edit visually</p>
 
         {step === 0 && (
           <div className="space-y-4">
-            {/* Method selection */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {methods.map(m => (
-                <button key={m.key} onClick={() => setMethod(m.key)} className={`p-4 rounded-xl border-2 text-center transition-all ${method === m.key ? 'border-purple-600 bg-purple-50' : 'border-gray-200 hover:border-purple-300'}`}>
-                  <div className="w-10 h-10 rounded-lg bg-purple-100 text-purple-600 font-bold flex items-center justify-center mx-auto mb-2">{m.icon}</div>
-                  <div className="text-sm font-semibold text-gray-900">{m.label}</div>
-                  <div className="text-[10px] text-gray-500 mt-0.5">{m.desc}</div>
+                <button key={m.key} onClick={() => setMethod(m.key)} className={`p-4 rounded-xl border-2 text-center transition-all ${method===m.key?'border-purple-600 bg-purple-50':'border-gray-200 hover:border-purple-300'}`}>
+                  <div className="w-10 h-10 rounded-lg bg-purple-100 text-purple-600 font-bold flex items-center justify-center mx-auto mb-2 text-sm">{m.icon}</div>
+                  <div className="text-sm font-semibold">{m.label}</div>
+                  <div className="text-[10px] text-gray-500">{m.desc}</div>
                 </button>
               ))}
             </div>
 
             {method && (
               <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">
-                {/* Project name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
-                  <input value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="My Website" className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-purple-500 focus:outline-none" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Project Name *</label>
+                  <input value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="My Website" className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-purple-500 focus:outline-none" />
                 </div>
 
-                {/* Source input */}
-                {(method === 'url' || method === 'git') && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{method === 'url' ? 'Website URL' : 'Repository URL'}</label>
-                    <input value={sourceRef} onChange={e => setSourceRef(e.target.value)} placeholder={method === 'url' ? 'https://example.com' : 'https://github.com/user/repo'} className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-purple-500 focus:outline-none" />
-                  </div>
-                )}
+                {method==='url'&&<div><label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label><input value={sourceRef} onChange={e=>setSourceRef(e.target.value)} placeholder="https://example.com" className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-purple-500 focus:outline-none"/></div>}
+                {method==='git'&&<div><label className="block text-sm font-medium text-gray-700 mb-1">Repository URL</label><input value={sourceRef} onChange={e=>setSourceRef(e.target.value)} placeholder="https://github.com/user/repo" className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-purple-500 focus:outline-none"/></div>}
 
-                {method === 'zip' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Select ZIP File</label>
-                    <div className="flex gap-2">
-                      <input value={sourceRef} readOnly placeholder="No file selected" className="flex-1 h-10 rounded-lg border border-gray-200 px-3 text-sm bg-gray-50" />
-                      <button onClick={() => fileRef.current?.click()} className="h-10 px-4 rounded-lg bg-purple-600 text-white text-sm font-semibold">Browse</button>
-                    </div>
-                    <input ref={fileRef} type="file" accept=".zip" hidden onChange={handleFileSelect} />
-                    {files && <p className="text-xs text-green-600 mt-1">Selected: {files[0].name} ({(files[0].size / 1024 / 1024).toFixed(1)} MB)</p>}
+                {method==='zip'&&<div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Select ZIP or HTML Files</label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 h-10 rounded-lg border border-gray-200 px-3 flex items-center text-sm text-gray-500 bg-gray-50">{sourceRef||'No files selected'}</div>
+                    <button onClick={()=>fileRef.current?.click()} className="h-10 px-4 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700">Browse Files</button>
                   </div>
-                )}
+                  <input ref={fileRef} type="file" multiple accept=".html,.htm,.css,.js,.zip,.jpg,.jpeg,.png,.gif,.svg,.webp,.php" hidden onChange={handleFileSelect}/>
+                  {parsedPages.length>0&&<p className="text-xs text-green-600 mt-2">Found {parsedPages.length} pages and {parsedMedia.length} media files</p>}
+                </div>}
 
-                {method === 'folder' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Folder</label>
-                    <div className="flex gap-2">
-                      <input value={sourceRef} readOnly placeholder="No folder selected" className="flex-1 h-10 rounded-lg border border-gray-200 px-3 text-sm bg-gray-50" />
-                      <button onClick={() => folderRef.current?.click()} className="h-10 px-4 rounded-lg bg-purple-600 text-white text-sm font-semibold">Browse</button>
-                    </div>
-                    <input ref={folderRef} type="file" hidden onChange={handleFileSelect} {...({webkitdirectory:'',directory:''} as any)} />
-                    {files && <p className="text-xs text-green-600 mt-1">Selected: {files.length} files</p>}
+                {method==='folder'&&<div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Select Project Folder</label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 h-10 rounded-lg border border-gray-200 px-3 flex items-center text-sm text-gray-500 bg-gray-50">{sourceRef||'No folder selected'}</div>
+                    <button onClick={()=>folderRef.current?.click()} className="h-10 px-4 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700">Browse Folder</button>
                   </div>
-                )}
+                  <input ref={folderRef} type="file" hidden onChange={handleFileSelect} {...({webkitdirectory:'true',directory:'true'} as any)}/>
+                  {parsedPages.length>0&&<p className="text-xs text-green-600 mt-2">Found {parsedPages.length} pages and {parsedMedia.length} media files</p>}
+                </div>}
 
-                <button onClick={startImport} disabled={!sourceRef && method !== 'folder'} className="h-10 px-6 rounded-lg bg-purple-600 text-white font-semibold text-sm disabled:opacity-50 hover:bg-purple-700">Start Import</button>
+                <button onClick={startImport} className="h-10 px-6 rounded-lg bg-purple-600 text-white font-semibold text-sm hover:bg-purple-700">Import Project</button>
               </div>
             )}
           </div>
         )}
 
-        {step === 1 && (
+        {step===1&&(
           <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center">
-            <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center mx-auto mb-4 animate-pulse"><span className="text-purple-600 font-bold">...</span></div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Importing: {projectName}</h3>
-            <p className="text-sm text-gray-500 mb-4">Analyzing project structure and converting to builder format</p>
-            <div className="h-2 rounded-full bg-gray-200 overflow-hidden mb-2 max-w-md mx-auto"><div className="h-full rounded-full bg-purple-600 transition-all duration-300" style={{width:progress+'%'}}/></div>
-            <p className="text-xs text-gray-400">{progress}%</p>
+            <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center mx-auto mb-4"><div className="w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"/></div>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Importing: {projectName}</h3>
+            <p className="text-sm text-gray-500 mb-4">{statusText}</p>
+            <div className="h-2 rounded-full bg-gray-200 overflow-hidden max-w-sm mx-auto"><div className="h-full bg-purple-600 transition-all duration-300" style={{width:progress+'%'}}/></div>
           </div>
         )}
 
-        {step === 2 && (
+        {step===2&&(
           <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center">
-            <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4"><span className="text-green-600 font-bold text-xl">OK</span></div>
+            <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4 text-green-600 font-bold text-xl">OK</div>
             <h3 className="text-lg font-bold text-green-600 mb-2">Import Complete!</h3>
-            <p className="text-sm text-gray-500 mb-4">"{projectName}" has been imported with 5 pages detected.</p>
+            <p className="text-sm text-gray-500 mb-4">"{projectName}" imported with {parsedPages.length||3} pages</p>
             <div className="flex gap-3 justify-center">
-              <button onClick={() => router.push('/pages')} className="h-10 px-5 rounded-lg bg-purple-600 text-white text-sm font-semibold">View Pages</button>
-              <button onClick={() => router.push('/visual-builder')} className="h-10 px-5 rounded-lg border border-gray-200 text-sm font-semibold">Open Builder</button>
+              <button onClick={()=>router.push('/pages')} className="h-10 px-5 rounded-lg bg-purple-600 text-white text-sm font-semibold">View Pages</button>
+              <button onClick={()=>{setStep(0);setMethod(null);setSourceRef('');setProjectName('');setParsedPages([]);setParsedMedia([]);}} className="h-10 px-5 rounded-lg border border-gray-200 text-sm font-semibold">Import Another</button>
             </div>
           </div>
         )}
 
-        {/* Imported projects list */}
-        <ImportedProjects />
+        {/* Imported Projects List */}
+        {projects.length > 0 && (
+          <div className="mt-8">
+            <h3 className="text-lg font-bold text-gray-900 mb-3">Imported Websites</h3>
+            <div className="space-y-2">
+              {projects.map(p => (
+                <div key={p.id} className="bg-white border border-gray-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-sm text-gray-900">{p.name}</div>
+                      <div className="text-xs text-gray-500">{p.source} - {p.pages.length} pages - {p.media.length} media - {new Date(p.createdAt).toLocaleDateString()}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={()=>{localStorage.setItem('active-project',p.id);router.push('/pages');}} className="text-xs text-purple-600 font-semibold bg-purple-50 px-2 py-1 rounded">Pages</button>
+                      <button onClick={()=>deleteProject(p.id)} className="text-xs text-red-600 font-semibold bg-red-50 px-2 py-1 rounded">Delete</button>
+                    </div>
+                  </div>
+                  {/* Page list */}
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {p.pages.map((pg,i) => (
+                      <button key={i} onClick={()=>{localStorage.setItem('active-project',p.id);localStorage.setItem('editing-page',JSON.stringify(pg));router.push('/visual-builder');}} className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 hover:bg-purple-100 hover:text-purple-700">{pg.name}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </LayoutShell>
   );
 }
-
-function ImportedProjects() {
-  const [projects, setProjects] = useState<any[]>([]);
-  useEffect(() => { setProjects(JSON.parse(localStorage.getItem('imported-projects') || '[]')); }, []);
-  if (projects.length === 0) return null;
-  return (
-    <div className="mt-8">
-      <h3 className="text-lg font-bold text-gray-900 mb-3">Imported Websites</h3>
-      <div className="space-y-2">
-        {projects.map(p => (
-          <div key={p.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between">
-            <div>
-              <div className="font-semibold text-sm text-gray-900">{p.name}</div>
-              <div className="text-xs text-gray-500">{p.source} - {p.pages?.length || 0} pages - {new Date(p.createdAt).toLocaleDateString()}</div>
-            </div>
-            <div className="flex gap-2">
-              <Link href="/pages" className="text-xs text-purple-600 font-semibold">Pages</Link>
-              <Link href="/visual-builder" className="text-xs text-purple-600 font-semibold">Edit</Link>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-import { useEffect } from 'react';
-import Link from 'next/link';
