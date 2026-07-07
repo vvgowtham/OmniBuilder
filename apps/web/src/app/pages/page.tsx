@@ -29,8 +29,14 @@ export default function PagesPage() {
     try { await api.createPage({title: newTitle}); setNewTitle(''); setShowCreate(false); setApiPages(await api.getPages()); } catch {}
   };
 
-  const openInBuilder = (page: {name:string;slug:string;html?:string}) => {
-    // Clear old builder data and set new page
+  // Opens in YellowPencil-style iframe editor (preserves layout)
+  const editImported = (page: {name:string;slug:string;html?:string}) => {
+    localStorage.setItem('editing-page', JSON.stringify(page));
+    router.push('/website-editor');
+  };
+
+  // Opens in drag-drop builder (for new pages)
+  const editInBuilder = (page: {name:string;slug:string;html?:string}) => {
     localStorage.removeItem('builder-nodes');
     localStorage.setItem('editing-page', JSON.stringify(page));
     router.push('/visual-builder');
@@ -53,7 +59,7 @@ export default function PagesPage() {
 
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search pages..." className="h-8 w-64 rounded-lg border border-gray-200 px-2 text-xs mb-4 focus:border-purple-500 focus:outline-none"/>
 
-        {/* Imported Projects with their pages */}
+        {/* Imported Websites */}
         {importedProjects.map(proj => {
           const filteredPages = (proj.pages || []).filter(p => !search || (p.name || '').toLowerCase().includes(search.toLowerCase()));
           if (filteredPages.length === 0 && search) return null;
@@ -66,17 +72,17 @@ export default function PagesPage() {
               </div>
               <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                 {filteredPages.map((page, i) => (
-                  <div key={i} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-all">
+                  <div key={i} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
                     <div className="flex items-center gap-3">
-                      <span className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-[10px] text-gray-500 font-semibold">{(i+1)}</span>
+                      <span className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-[10px] text-gray-500 font-semibold">{i+1}</span>
                       <div>
                         <div className="text-sm font-medium text-gray-900">{page.name || 'Untitled'}</div>
                         <div className="text-[10px] text-gray-400">/{page.slug || ''}</div>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={()=>openInBuilder(page)} className="text-[11px] text-purple-600 font-semibold bg-purple-50 px-3 py-1 rounded-lg hover:bg-purple-100 transition-all">Edit in Builder</button>
-                      <span className="text-[10px] text-green-600 font-semibold bg-green-50 px-2 py-1 rounded-lg">Imported</span>
+                      <button onClick={()=>editImported(page)} className="text-[10px] text-purple-600 font-semibold bg-purple-50 px-2.5 py-1 rounded-lg hover:bg-purple-100">Edit (Preserve Layout)</button>
+                      <button onClick={()=>editInBuilder(page)} className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100">Open in Builder</button>
                     </div>
                   </div>
                 ))}
@@ -97,8 +103,7 @@ export default function PagesPage() {
                 <div key={p.id} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
                   <div><div className="text-sm font-medium">{p.title}</div><div className="text-[10px] text-gray-400">/{p.slug}</div></div>
                   <div className="flex gap-2">
-                    <button onClick={()=>openInBuilder({name:p.title,slug:p.slug})} className="text-[11px] text-purple-600 font-semibold">Edit</button>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${p.status==='published'?'bg-green-100 text-green-700':'bg-yellow-100 text-yellow-700'}`}>{p.status}</span>
+                    <button onClick={()=>editInBuilder({name:p.title,slug:p.slug})} className="text-[10px] text-purple-600 font-semibold">Edit</button>
                     <button onClick={()=>handleDelete(p.id)} className="text-[10px] text-red-600 font-semibold">Del</button>
                   </div>
                 </div>
@@ -110,9 +115,7 @@ export default function PagesPage() {
         {importedProjects.length===0 && apiPages.length===0 && !loading && (
           <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
             <p className="text-gray-400 mb-3">No pages yet</p>
-            <div className="flex gap-2 justify-center">
-              <Link href="/import" className="text-xs text-purple-600 font-semibold bg-purple-50 px-3 py-1.5 rounded-lg">Import a Website</Link>
-            </div>
+            <Link href="/import" className="text-xs text-purple-600 font-semibold bg-purple-50 px-3 py-1.5 rounded-lg">Import a Website</Link>
           </div>
         )}
       </div>
