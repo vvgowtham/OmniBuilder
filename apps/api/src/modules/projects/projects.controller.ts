@@ -1,14 +1,11 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { ProjectsService } from './projects.service';
 
-@ApiTags('Projects')
-@ApiBearerAuth()
 @UseGuards(AuthGuard('jwt'))
 @Controller('projects')
 export class ProjectsController {
-  constructor(private projects: ProjectsService) {}
+  constructor(private readonly projects: ProjectsService) {}
 
   @Post()
   create(@Request() req: any, @Body() dto: { name: string; description?: string; organizationId: string }) {
@@ -16,14 +13,22 @@ export class ProjectsController {
   }
 
   @Get()
-  findAll(@Query('organizationId') orgId: string) { return this.projects.findAll(orgId); }
+  findAll(@Query('organizationId') orgId: string) {
+    return this.projects.findAll(orgId);
+  }
 
   @Get(':id')
-  findOne(@Param('id') id: string) { return this.projects.findOne(id); }
+  findOne(@Param('id') id: string) {
+    return this.projects.findOne(id);
+  }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: any) { return this.projects.update(id, dto); }
+  update(@Param('id') id: string, @Body() dto: any) {
+    return this.projects.update(id, dto);
+  }
 
   @Delete(':id')
-  remove(@Param('id') id: string) { return this.projects.delete(id); }
+  remove(@Param('id') id: string) {
+    return this.projects.remove(id);
+  }
 }
