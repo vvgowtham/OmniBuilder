@@ -1,5 +1,8 @@
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+
 // ============================================================
-// OmniBuilder Adapter Core — Interfaces and Base Classes
+// OmniBuilder Adapter Core - Interfaces and Base Classes
 // ============================================================
 
 export interface FileManifest {
@@ -169,8 +172,21 @@ export abstract class BaseFrameworkAdapter {
   abstract validateBuild(ctx: AnalysisContext): Promise<ValidationResult>;
 
   protected async readFile(projectPath: string, filePath: string): Promise<string> {
-    const fs = require('fs/promises');
-    const path = require('path');
     return fs.readFile(path.join(projectPath, filePath), 'utf-8');
+  }
+
+  protected async writeFile(projectPath: string, filePath: string, content: string): Promise<void> {
+    const fullPath = path.join(projectPath, filePath);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, content, 'utf-8');
+  }
+
+  protected async fileExists(projectPath: string, filePath: string): Promise<boolean> {
+    try {
+      await fs.access(path.join(projectPath, filePath));
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

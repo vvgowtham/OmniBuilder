@@ -1,12 +1,8 @@
-import Queue from 'bull';
+console.log('Sync worker started, waiting for jobs...');
 
-const syncQueue = new Queue('sync', { redis: { host: process.env.REDIS_HOST || 'localhost', port: 6379 } });
-
-syncQueue.process('apply-patch', async (job) => {
-  const { changeSetId, projectId } = job.data;
-  console.log(`Applying patch ${changeSetId} for project ${projectId}`);
-  // Sync processing logic here
-  return { success: true };
+process.on('SIGINT', () => {
+  console.log('Sync worker shutting down...');
+  process.exit(0);
 });
 
-console.log('Sync worker started, waiting for jobs...');
+setInterval(() => {}, 10000);
